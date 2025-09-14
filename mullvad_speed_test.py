@@ -1,12 +1,19 @@
 #!/usr/bin/env python3
 """Mullvad VPN Server Performance Tester - Optimized Version"""
-import subprocess, json, re, time, os, pickle, sqlite3, statistics, logging, sys, shutil, random, threading
+import subprocess, json, re, time, os, pickle, sqlite3, statistics, logging, sys, random, threading
 from typing import List, Dict, Tuple, Optional, Set, Union, Any
 from dataclasses import dataclass
 from datetime import datetime
 from functools import lru_cache
 import argparse
-from ui.display_manager import DisplayManager
+from ui.display_manager import (
+    DisplayManager,
+    get_symbol,
+    get_terminal_width,
+    COLOR_SUPPORT,
+    Fore,
+    Style,
+)
 
 # Constants
 DEFAULT_MAX_SERVERS, MAX_SERVERS_HARD_LIMIT = 15, 45
@@ -30,32 +37,6 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
                    handlers=[logging.FileHandler('mullvad_speed_test.log')])
 logger = logging.getLogger(__name__)
 
-# Try to import colorama for color support
-try:
-    from colorama import init, Fore, Back, Style
-    init(autoreset=True)
-    COLOR_SUPPORT = True
-except ImportError:
-    # Create dummy color classes if colorama is not available
-    class DummyFore: RED = GREEN = YELLOW = BLUE = MAGENTA = CYAN = WHITE = RESET = LIGHTGREEN_EX = LIGHTYELLOW_EX = LIGHTRED_EX = ''
-    class DummyStyle: BRIGHT = DIM = NORMAL = RESET_ALL = ''
-    class DummyBack: RED = GREEN = YELLOW = BLUE = RESET = ''
-    Fore, Style, Back = DummyFore(), DummyStyle(), DummyBack()
-    COLOR_SUPPORT = False
-
-# UI symbols (Unicode and ASCII)
-SYMBOLS = {
-    'success': '✓', 'error': '✗', 'warning': '⚠', 'info': 'ℹ', 'connecting': '→', 'testing': '⋯', 
-    'bullet': '•', 'right_arrow': '→', 'speedometer': '🔄', 'clock': '⏱', 'globe': '🌐', 
-    'server': '🖥 ', 'signal': '📶', 'download': '⬇', 'upload': '⬆', 'ping': '📡', 
-    'checkmark': '✓', 'cross': '✗',
-}
-ASCII_SYMBOLS = {k: v for k, v in zip(SYMBOLS.keys(), ['+', 'x', '!', 'i', '>', '...', '*', '->', 'O', 'T', 'G', 'S ', '^', 'D', 'U', 'P', 'V', 'X'])}
-
-# Check if terminal supports Unicode
-try: "\u2713".encode(sys.stdout.encoding); USE_UNICODE = True
-except UnicodeEncodeError: USE_UNICODE = False
-
 # Dataclasses for structured data
 @dataclass
 class ServerInfo:
@@ -70,32 +51,6 @@ class SpeedTestResult:
 @dataclass
 class MtrResult:
     avg_latency: float; packet_loss: float; hops: int
-
-# UI Utilities
-def get_symbol(name): return SYMBOLS.get(name, '') if USE_UNICODE else ASCII_SYMBOLS.get(name, '')
-def get_terminal_width(): return shutil.get_terminal_size().columns if hasattr(shutil, 'get_terminal_size') else 80
-
-def print_status(message, status=None):
-    """Unified function for printing status messages with appropriate styling"""
-    if status == "success": prefix, color = get_symbol('success'), Fore.GREEN
-    elif status == "error": prefix, color = get_symbol('error'), Fore.RED
-    elif status == "warning": prefix, color = get_symbol('warning'), Fore.YELLOW
-    elif status == "info": prefix, color = get_symbol('info'), Fore.BLUE
-    else: print(message); return
-    print(f"{color}{prefix} {message}{Style.RESET_ALL}" if COLOR_SUPPORT else f"{prefix} {message}")
-
-def print_header(title, width=None):
-    width = width or get_terminal_width()
-    if COLOR_SUPPORT:
-        print(f"\n{Fore.CYAN}{Style.BRIGHT}{title}\n{'-' * min(len(title), width)}{Style.RESET_ALL}")
-    else:
-        print(f"\n{title}\n{'-' * min(len(title), width)}")
-
-# Shorthand status printing functions 
-def print_success(message): print_status(message, "success")
-def print_error(message): print_status(message, "error")
-def print_warning(message): print_status(message, "warning")
-def print_info(message): print_status(message, "info")
 
 def format_server_info(server):
     """Format server information nicely"""
@@ -121,54 +76,9 @@ def format_speedtest_results(result):
         f"{get_symbol('ping')} {result.ping:.2f} ms | "
         f"Jitter: {result.jitter:.2f} ms | Loss: {result.packet_loss:.2f}%")
 
-def print_connection_status(hostname, status, time_taken=None):
-    """Print connection status with color coding"""
-    if status == "connecting":
-        msg = f"{get_symbol('connecting')} Connecting to {hostname}..."
-        if COLOR_SUPPORT: print(f"{Fore.YELLOW}{msg}{Style.RESET_ALL}", end="\r")
-        else: print(msg, end="\r")
-    elif status == "success":
-        msg = f"{get_symbol('success')} Connected to {hostname}" + (f" in {time_taken:.2f}s" if time_taken else "")
-        if COLOR_SUPPORT: print(f"{Fore.GREEN}{msg}{Style.RESET_ALL}")
-        else: print(msg)
-    elif status == "error":
-        msg = f"{get_symbol('error')} Connection to {hostname} failed"
-        if COLOR_SUPPORT: print(f"{Fore.RED}{msg}{Style.RESET_ALL}")
-        else: print(msg)
-    elif status == "timeout":
-        msg = f"{get_symbol('clock')} Connection to {hostname} timed out"
-        if COLOR_SUPPORT: print(f"{Fore.RED}{msg}{Style.RESET_ALL}")
-        else: print(msg)
-
-def print_progress_bar(iteration, total, prefix='', suffix='', length=50, fill='█'):
-    """Print a progress bar with gradient colors from green to red"""
-    percent = 100 * (iteration / float(total))
-    filled_length = int(length * iteration // total)
-    bar = fill * filled_length + ' ' * (length - filled_length)
-    
-    if COLOR_SUPPORT:
-        # Create a gradient from green to red (reversed from original)
-        try:
-            if percent <= 16: color = Fore.GREEN  # 0-16%: Green
-            elif percent <= 33: color = Fore.LIGHTGREEN_EX  # 16-33%: Light Green
-            elif percent <= 50: color = Fore.YELLOW  # 33-50%: Yellow
-            elif percent <= 66: color = Fore.LIGHTYELLOW_EX  # 50-66%: Light Yellow
-            elif percent <= 83: color = Fore.LIGHTRED_EX  # 66-83%: Light Red
-            else: color = Fore.RED  # 83-100%: Red
-        except AttributeError:
-            # Fallback if extended colors aren't available
-            if percent <= 33: color = Fore.GREEN
-            elif percent <= 66: color = Fore.YELLOW
-            else: color = Fore.RED
-            
-        print(f'\r{prefix} {color}{bar}{Style.RESET_ALL} {percent:.1f}% {suffix}', end='\r')
-    else:
-        print(f'\r{prefix} {bar} {percent:.1f}% {suffix}', end='\r')
-    if iteration == total: print()
-
-def display_parameters_summary(args, countdown_seconds=5):
+def display_parameters_summary(args, ui, countdown_seconds=5):
     """Display a summary of all parameters with a countdown"""
-    print_header("SUMMARY OF MULLVAD VPN TEST PARAMETERS")
+    ui.header("SUMMARY OF MULLVAD VPN TEST PARAMETERS")
     params = [
         f"Location: {args.location}",
         f"Protocol: {args.protocol}",
@@ -180,7 +90,11 @@ def display_parameters_summary(args, countdown_seconds=5):
         f"Database file: {args.db}",
         f"Interactive mode: {'Yes' if args.interactive else 'No'}"
     ]
-    for param in params: print_info(param)
+    for param in params:
+        ui.info(param)
+
+    if not ui.interactive:
+        return
 
     print(f"\nTests will start in {countdown_seconds} seconds. Press Ctrl+C to cancel...")
     try:
@@ -210,59 +124,7 @@ def run_command(cmd, timeout=None, check=False, capture_output=False):
         logger.error(f"Error running command {' '.join(cmd)}: {e}")
         return None
 
-def run_with_spinner(message, action, timeout=None):
-    """Display a spinner while running an action.
-
-    Args:
-        message: Message displayed alongside the spinner.
-        action: Callable accepting a stop_event and returning a result.
-        timeout: Maximum duration in seconds before setting the stop_event.
-
-    Returns:
-        Tuple of (result, timed_out, elapsed_time).
-    """
-    spinner_chars = ['|', '/', '-', '\\']
-    spinner_idx = 0
-    stop_event = threading.Event()
-    result = {'value': None, 'error': None}
-
-    def runner():
-        try:
-            result['value'] = action(stop_event)
-        except Exception as e:
-            result['error'] = e
-        finally:
-            stop_event.set()
-
-    thread = threading.Thread(target=runner, daemon=True)
-    thread.start()
-    start_time = time.time()
-    timed_out = False
-
-    try:
-        while thread.is_alive():
-            elapsed = time.time() - start_time
-            if timeout is not None and elapsed >= timeout:
-                timed_out = True
-                stop_event.set()
-            if timeout is not None:
-                time_info = f"({max(0, timeout - elapsed):.0f}s remaining)"
-            else:
-                time_info = f"({elapsed:.1f}s)"
-            print(f"\r{message} {spinner_chars[spinner_idx]} {time_info} ", end='', flush=True)
-            spinner_idx = (spinner_idx + 1) % len(spinner_chars)
-            time.sleep(0.1)
-    finally:
-        thread.join()
-        print(f"\r{' ' * get_terminal_width()}\r", end='')
-        print()
-
-    elapsed_total = time.time() - start_time
-    if result['error'] and not timed_out:
-        raise result['error']
-    return result.get('value'), timed_out, elapsed_total
-
-def load_geo_modules():
+def load_geo_modules(ui):
     """Lazily load geopy modules only when needed"""
     try:
         from geopy.distance import geodesic
@@ -271,52 +133,56 @@ def load_geo_modules():
         return geodesic, Nominatim, GeocoderTimedOut
     except ImportError:
         logger.error("geopy modules not found. Please install with: pip install geopy")
-        print_error("Required geopy modules not found. Please install with: pip install geopy")
+        ui.error("Required geopy modules not found. Please install with: pip install geopy")
         sys.exit(1)
 
-def input_location():
+def input_location(ui):
     """Interactive function to input location"""
-    print_header("LOCATION FOR MULLVAD VPN TESTS")
-    print_info("Please enter your location in the format 'City, Country'")
+    ui.header("LOCATION FOR MULLVAD VPN TESTS")
+    ui.info("Please enter your location in the format 'City, Country'")
     print("Example: 'Paris, France' or 'Beijing, China'")
-    
+
     while True:
         location = input("\nYour location: ").strip()
         if location:
-            if ',' in location and len(location.split(',')) >= 2: return location
-            else: print_warning("Incorrect format. Please use the format 'City, Country'")
+            if ',' in location and len(location.split(',')) >= 2:
+                return location
+            else:
+                ui.warning("Incorrect format. Please use the format 'City, Country'")
         else:
-            print_info(f"Using default location: {DEFAULT_LOCATION}")
+            ui.info(f"Using default location: {DEFAULT_LOCATION}")
             return DEFAULT_LOCATION
 
-def input_coordinates():
+def input_coordinates(ui):
     """Interactive function to input coordinates manually"""
-    print_header("MANUAL COORDINATES INPUT")
-    print_warning("Unable to determine coordinates automatically.")
-    print_info("Please enter the coordinates manually.\n")
-    
+    ui.header("MANUAL COORDINATES INPUT")
+    ui.warning("Unable to determine coordinates automatically.")
+    ui.info("Please enter the coordinates manually.\n")
+
     while True:
         try:
             lat = float(input("Latitude (e.g. 48.8566 for Paris): ").strip())
             lon = float(input("Longitude (e.g. 2.3522 for Paris): ").strip())
-            
+
             if -90 <= lat <= 90 and -180 <= lon <= 180:
-                print_success(f"Coordinates accepted: ({lat}, {lon})")
+                ui.success(f"Coordinates accepted: ({lat}, {lon})")
                 return (lat, lon)
             else:
-                print_warning("Coordinates out of range. Latitude: -90 to 90, Longitude: -180 to 180")
+                ui.warning("Coordinates out of range. Latitude: -90 to 90, Longitude: -180 to 180")
         except ValueError:
-            print_error("Please enter valid numbers.")
+            ui.error("Please enter valid numbers.")
 
-def print_welcome():
+def print_welcome(ui):
     """Print a welcome message with ASCII art"""
+    if not ui.interactive:
+        return
     title = """
- __  __         _ _               _  __     _______  _   _   _____         _            
-|  \/  |       | | |             | | \ \   /  /  _ \| \ | | |_   _|       | |           
-| \  / |_   _ _| | |_   ____ _  _| |  \ \_/  /| |_) |  \| |   | | ___  ___| |_ ___ _ __ 
+ __  __         _ _               _  __     _______  _   _   _____         _
+|  \/  |       | | |             | | \ \   /  /  _ \| \ | | |_   _|       | |
+| \  / |_   _ _| | |_   ____ _  _| |  \ \_/  /| |_) |  \| |   | | ___  ___| |_ ___ _ __
 | |\/| | | | | | | \ \ / / _` |/ _` |  \    / |  __/| . ` |   | |/ _ \/ __| __/ _ \ '__|
-| |  | | |_| | | | |\ V / (_| | (_| |   \  /  | |   | |\  |   | |  __/\__ \ ||  __/ |   
-|_|  |_|\__,_|_|_|_| \_/ \__,_|\__,_|    \/   |_|   |_| \_|   |_|\___||___/\__\___|_|   
+| |  | | |_| | | | |\ V / (_| | (_| |   \  /  | |   | |\  |   | |  __/\__ \ ||  __/ |
+|_|  |_|\__,_|_|_|_| \_/ \__,_|\__,_|    \/   |_|   |_| \_|   |_|\___||___/\__\___|_|
     """
     if COLOR_SUPPORT:
         print(f"{Fore.CYAN}{Style.BRIGHT}{title}{Style.RESET_ALL}")
@@ -350,7 +216,7 @@ class MullvadTester:
         
         # Get reference location
         if interactive and reference_location == DEFAULT_LOCATION:
-            reference_location = input_location()
+            reference_location = input_location(self.ui)
         
         self.reference_location = reference_location
         self.default_coords = (default_lat, default_lon) if default_lat is not None and default_lon is not None else None
@@ -361,7 +227,7 @@ class MullvadTester:
         self.reference_coords = self._get_location_coordinates()
         
         # Get Mullvad servers
-        print_header("RETRIEVING MULLVAD SERVERS")
+        self.ui.header("RETRIEVING MULLVAD SERVERS")
         self.servers = self._get_servers()
         
         # Initialize results and counters
@@ -370,7 +236,7 @@ class MullvadTester:
         self.successful_servers = 0
         
         if not self.servers:
-            print_error("No Mullvad servers found. Please check that Mullvad is installed and accessible.")
+            self.ui.error("No Mullvad servers found. Please check that Mullvad is installed and accessible.")
             logger.error("No Mullvad servers found")
             sys.exit(1)
             
@@ -378,9 +244,9 @@ class MullvadTester:
         logger.info(f"Reference location: {reference_location} ({self.reference_coords})")
         
         if interactive:
-            print_success(f"Mullvad servers found: {len(self.servers)}")
-            print_info(f"Reference location: {reference_location}")
-            print_info(f"Coordinates: ({self.reference_coords[0]:.4f}, {self.reference_coords[1]:.4f})")
+            self.ui.success(f"Mullvad servers found: {len(self.servers)}")
+            self.ui.info(f"Reference location: {reference_location}")
+            self.ui.info(f"Coordinates: ({self.reference_coords[0]:.4f}, {self.reference_coords[1]:.4f})")
 
     def _load_coords_cache(self):
         """Load coordinates cache from disk if it exists"""
@@ -454,7 +320,7 @@ class MullvadTester:
             return coords
         
         # Load geopy modules
-        geodesic, Nominatim, GeocoderTimedOut = load_geo_modules()
+        geodesic, Nominatim, GeocoderTimedOut = load_geo_modules(self.ui)
         
         try:
             geolocator = Nominatim(user_agent="mullvad_speed_test")
@@ -479,11 +345,11 @@ class MullvadTester:
 
                     choice = input("\nYour choice (1/2): ").strip()
                     if choice == "1":
-                        new_location = input_location()
+                        new_location = input_location(self.ui)
                         self.reference_location = new_location
                         return self._get_location_coordinates()
                     else:
-                        coords = input_coordinates()
+                        coords = input_coordinates(self.ui)
                         self.coords_cache[location] = coords
                         self._save_coords_cache()
                         return coords
@@ -508,7 +374,7 @@ class MullvadTester:
             
             if self.interactive:
                 self.ui.error(f"Error searching for coordinates: {e}")
-                coords = input_coordinates()
+                coords = input_coordinates(self.ui)
                 self.coords_cache[location] = coords
                 self._save_coords_cache()
                 return coords
@@ -520,7 +386,7 @@ class MullvadTester:
     def _calculate_distance(self, server_coords):
         """Calculate distance between server and reference location"""
         if server_coords == (0.0, 0.0) or self.reference_coords == (0.0, 0.0): return float('inf')
-        geodesic, _, _ = load_geo_modules()
+        geodesic, _, _ = load_geo_modules(self.ui)
         return geodesic(self.reference_coords, server_coords).kilometers
 
     def _get_servers(self):
@@ -1010,7 +876,7 @@ class MullvadTester:
             remaining_time = max(1, total_timeout - elapsed_setup_time)
             
             if self.interactive:
-                print_info(f"Waiting for connection confirmation (total timeout: {total_timeout:.1f}s)...")
+                self.ui.info(f"Waiting for connection confirmation (total timeout: {total_timeout:.1f}s)...")
                 
                 poll_interval = 0.1  # Check every 0.1 seconds for smoother progress bar
                 max_steps = int(remaining_time / poll_interval)
@@ -1027,11 +893,11 @@ class MullvadTester:
                             server.connection_time = total_elapsed
                             logger.info(f"Successfully connected to server in {total_elapsed:.2f} seconds")
                             print(f"\r{' ' * get_terminal_width()}", end='\r')
-                            print_connection_status(server.hostname, "success", total_elapsed)
+                            self.ui.connection_status(server.hostname, "success", total_elapsed)
                             return True
                     except: pass
                     
-                    print_progress_bar(
+                    self.ui.progress_bar(
                         total_elapsed, total_timeout,
                         prefix=f"{get_symbol('connecting')} Connection: ", 
                         suffix=f"{total_elapsed:.1f}s / {total_timeout:.1f}s"
@@ -1039,8 +905,8 @@ class MullvadTester:
                     time.sleep(poll_interval)
                     
                 print(f"\r{' ' * get_terminal_width()}", end='\r')  # Clear progress bar
-                print_connection_status(server.hostname, "timeout")
-                print_info(f"Server {server.hostname} did not respond within the timeout of {total_timeout:.1f}s")
+                self.ui.connection_status(server.hostname, "timeout")
+                self.ui.info(f"Server {server.hostname} did not respond within the timeout of {total_timeout:.1f}s")
             else:
                 # Non-interactive mode - more efficient polling
                 poll_interval = 0.2
@@ -1063,8 +929,8 @@ class MullvadTester:
         except Exception as e:
             logger.error(f"Unexpected error while connecting to server: {e}")
             if self.interactive:
-                print_connection_status(server.hostname, "error")
-                print_error(f"Connection error: {str(e).split(':')[0]}")
+                self.ui.connection_status(server.hostname, "error")
+                self.ui.error(f"Connection error: {str(e).split(':')[0]}")
             return False
 
     def test_server(self, server):
@@ -1075,17 +941,18 @@ class MullvadTester:
             logger.warning(f"Skipping tests for {server.hostname} due to connection failure")
             return SpeedTestResult(0, 0, 0, 0, 100), MtrResult(0, 100, 0), False
 
-        if self.interactive: print_info(f"Allowing connection to stabilize before testing...")
+        if self.interactive:
+            self.ui.info(f"Allowing connection to stabilize before testing...")
         
         stabilization_time = 8  # seconds to allow for connection optimization
 
         if self.interactive:
-            run_with_spinner(
+            self.ui.spinner(
                 f"{get_symbol('connecting')} Stabilizing connection",
                 lambda stop_event: stop_event.wait(stabilization_time),
                 timeout=stabilization_time,
             )
-            print_success("Connection stabilized and ready for testing")
+            self.ui.success("Connection stabilized and ready for testing")
         else:
             time.sleep(stabilization_time)
 
@@ -1094,23 +961,27 @@ class MullvadTester:
         
         if speedtest_result.download_speed < self.min_download_speed and speedtest_result.download_speed > 0:
             if self.interactive:
-                print_info(f"Insufficient speed: {speedtest_result.download_speed:.2f} Mbps < {self.min_download_speed} Mbps")
-                print_info(f"Server {server.hostname} is classified as non-viable")
+                self.ui.info(f"Insufficient speed: {speedtest_result.download_speed:.2f} Mbps < {self.min_download_speed} Mbps")
+                self.ui.info(f"Server {server.hostname} is classified as non-viable")
             viable = False
         
         # Run MTR test if speed test was successful
         if speedtest_result.download_speed == 0:
-            if self.interactive: print_info(f"Speed test unsuccessful, MTR test skipped")
+            if self.interactive:
+                self.ui.info(f"Speed test unsuccessful, MTR test skipped")
             mtr_result = MtrResult(0, 100, 0)
         else: mtr_result = self._run_mtr()
         
         if speedtest_result.download_speed > 0 and mtr_result.avg_latency > 0:
             self.successful_servers += 1
             if self.interactive:
-                if viable: print_success(f"Test successful for {server.hostname} ✓")
-                else: print_info(f"Test successful but insufficient speed for {server.hostname}")
+                if viable:
+                    self.ui.success(f"Test successful for {server.hostname} ✓")
+                else:
+                    self.ui.info(f"Test successful but insufficient speed for {server.hostname}")
         else:
-            if self.interactive: print_info(f"Server {server.hostname} did not respond correctly")
+            if self.interactive:
+                self.ui.info(f"Server {server.hostname} did not respond correctly")
             viable = False
             
         return speedtest_result, mtr_result, viable
@@ -1157,14 +1028,14 @@ class MullvadTester:
         
         if not protocol_servers:
             logger.error(f"No servers found for protocol: {protocol}")
-            if self.interactive: print_error(f"No servers found for protocol {protocol}")
+            self.ui.error(f"No servers found for protocol {protocol}")
             return
         
         # Calibrate connection timeout
         avg_time = self.run_connection_calibration()
         
         if self.interactive:
-            print_header("MULLVAD VPN TEST PARAMETERS")
+            self.ui.header("MULLVAD VPN TEST PARAMETERS")
             params = [
                 f"Date                : {timestamp}",
                 f"Location            : {self.reference_location}",
@@ -1175,7 +1046,8 @@ class MullvadTester:
                 f"Maximum distance    : {max_distance if max_distance else 'No limit'} km",
                 f"Results file        : {results_file}"
             ]
-            for param in params: print_info(param)
+            for param in params:
+                self.ui.info(param)
             print("")  # Add a blank line for readability
             
         # Create a test session in the database
@@ -1231,9 +1103,11 @@ class MullvadTester:
                        (f" within {max_distance} km" if max_distance else ""))
             
             if self.interactive:
-                print_header("STARTING TESTS")
-                print_info(f"Starting tests on {len(initial_servers)} servers " + 
-                         (f"(max distance: {max_distance} km)" if max_distance else ""))
+                self.ui.header("STARTING TESTS")
+                self.ui.info(
+                    f"Starting tests on {len(initial_servers)} servers " +
+                    (f"(max distance: {max_distance} km)" if max_distance else "")
+                )
             
             tested_servers = []
             total_servers_to_test = initial_servers.copy()
@@ -1247,10 +1121,10 @@ class MullvadTester:
                 logger.info(f"\nTesting server {idx}/{len(initial_servers)}: {server.hostname}")
                 
                 if self.interactive:
-                    print_header(f"TEST {idx}/{len(initial_servers) if idx <= len(initial_servers) else '+'}")
-                    print_info(f"Server: {server.hostname}")
-                    print_info(f"Location: {server.city}, {server.country}")
-                    print_info(f"Distance: {server.distance_km:.0f} km")
+                    self.ui.header(f"TEST {idx}/{len(initial_servers) if idx <= len(initial_servers) else '+'}")
+                    self.ui.info(f"Server: {server.hostname}")
+                    self.ui.info(f"Location: {server.city}, {server.country}")
+                    self.ui.info(f"Distance: {server.distance_km:.0f} km")
                 else:
                     print(f"\nTest server {idx}/{len(initial_servers) if idx <= len(initial_servers) else '+'}: {server.hostname}")
                     print(f"Location: {server.city}, {server.country} (Distance: {server.distance_km:.0f} km)")
@@ -1266,13 +1140,13 @@ class MullvadTester:
                 self._write_server_results_to_file(f, server, speedtest_result, mtr_result, viable)
                 
                 if self.interactive:
-                    print_info(f"Progress: {idx} servers tested ({self.successful_servers} successful, {viable_servers} viable)")
+                    self.ui.info(f"Progress: {idx} servers tested ({self.successful_servers} successful, {viable_servers} viable)")
                 
                 # Check if we've found enough viable servers
                 if viable_servers >= self.min_viable_servers and idx >= max_servers:
                     logger.info(f"Found {viable_servers} viable servers after testing {idx} servers. Stopping tests.")
                     if self.interactive:
-                        print_success(f"Goal achieved: {viable_servers}/{self.min_viable_servers} viable servers found.")
+                        self.ui.success(f"Goal achieved: {viable_servers}/{self.min_viable_servers} viable servers found.")
                     break
                     
                 if idx < max_servers: continue
@@ -1283,8 +1157,8 @@ class MullvadTester:
                         logger.info(f"Extending testing beyond initial {max_servers} servers to find {self.min_viable_servers} viable servers")
                         
                         if self.interactive:
-                            print_warning(f"Only {viable_servers}/{self.min_viable_servers} viable servers found")
-                            print_info(f"Searching for servers on continents other than {self.user_continent}")
+                            self.ui.warning(f"Only {viable_servers}/{self.min_viable_servers} viable servers found")
+                            self.ui.info(f"Searching for servers on continents other than {self.user_continent}")
                         
                         f.write(f"\nNote: Extending testing beyond initial {max_servers} servers to find at least {self.min_viable_servers} viable servers.\n")
                         f.write(f"Excluding servers from {self.user_continent} and selecting from other continents.\n\n")
@@ -1306,20 +1180,20 @@ class MullvadTester:
                             if additional_servers:
                                 if self.interactive:
                                     countries_count = len(set([s.hostname.split('-')[0] for s in additional_servers]))
-                                    print_info(f"Found {len(additional_servers)} servers from {countries_count} countries")
+                                    self.ui.info(f"Found {len(additional_servers)} servers from {countries_count} countries")
                                 
                                 remaining_servers = additional_servers
                             else:
                                 logger.warning("No more servers available for additional testing")
                                 if self.interactive:
-                                    print_warning("No more servers available for additional testing")
+                                    self.ui.warning("No more servers available for additional testing")
                     
                     # Check if we've hit the hard limit
                     if len(tested_servers) >= self.max_servers_hard_limit:
                         logger.warning(f"Reached hard limit of {self.max_servers_hard_limit} servers tested without finding {self.min_viable_servers} viable servers")
                         if self.interactive:
-                            print_warning(f"Maximum limit reached: {self.max_servers_hard_limit} servers tested")
-                            print_warning(f"Unable to find {self.min_viable_servers} viable servers")
+                            self.ui.warning(f"Maximum limit reached: {self.max_servers_hard_limit} servers tested")
+                            self.ui.warning(f"Unable to find {self.min_viable_servers} viable servers")
                         break
                     
                     # Get next server to test
@@ -1328,7 +1202,8 @@ class MullvadTester:
                         total_servers_to_test.append(next_server)
                     else:
                         logger.warning("No more servers available to test")
-                        if self.interactive: print_warning("No more servers available to test")
+                        if self.interactive:
+                            self.ui.warning("No more servers available to test")
                         break
                 else: break
 
@@ -1337,30 +1212,40 @@ class MullvadTester:
                 self._print_summary(results_file, viable_servers)
                 
                 if self.interactive:
-                    print_header("TESTS COMPLETED")
-                    print_success(f"Tests successfully completed: {self.successful_servers} functional servers out of {len(tested_servers)} tested")
+                    self.ui.header("TESTS COMPLETED")
+                    self.ui.success(
+                        f"Tests successfully completed: {self.successful_servers} functional servers out of {len(tested_servers)} tested"
+                    )
                     if viable_servers >= self.min_viable_servers:
-                        print_success(f"Goal achieved: {viable_servers}/{self.min_viable_servers} viable servers (speed > {self.min_download_speed} Mbps)")
+                        self.ui.success(
+                            f"Goal achieved: {viable_servers}/{self.min_viable_servers} viable servers (speed > {self.min_download_speed} Mbps)"
+                        )
                     else:
-                        print_warning(f"Goal not achieved: {viable_servers}/{self.min_viable_servers} viable servers (speed > {self.min_download_speed} Mbps)")
-                    print_info(f"Detailed results saved in: {results_file}")
-                    
+                        self.ui.warning(
+                            f"Goal not achieved: {viable_servers}/{self.min_viable_servers} viable servers (speed > {self.min_download_speed} Mbps)"
+                        )
+                    self.ui.info(f"Detailed results saved in: {results_file}")
+
                     print("\nWould you like to open the results file?")
                     choice = input("Open file? (y/n): ").strip().lower()
                     if choice.startswith('y'):
                         try:
-                            if sys.platform == 'darwin': subprocess.call(('open', results_file))
-                            elif sys.platform == 'win32': os.startfile(results_file)
-                            else: subprocess.call(('xdg-open', results_file))
+                            if sys.platform == 'darwin':
+                                subprocess.call(('open', results_file))
+                            elif sys.platform == 'win32':
+                                os.startfile(results_file)
+                            else:
+                                subprocess.call(('xdg-open', results_file))
                         except Exception as e:
-                            print_error(f"Unable to open file: {e}")
+                            self.ui.error(f"Unable to open file: {e}")
                 else:
                     print(f"\nTests completed with {self.successful_servers} functional servers out of {len(tested_servers)} tested.")
                     print(f"Viable servers (speed > {self.min_download_speed} Mbps): {viable_servers}/{self.min_viable_servers} required")
                     print(f"Results saved in {results_file}")
             else:
                 logger.error("No test results available to generate summary")
-                if self.interactive: print_error("No test results available to generate a summary.")
+                if self.interactive:
+                    self.ui.error("No test results available to generate a summary.")
 
     def _write_server_results_to_file(self, file, server, speedtest_result, mtr_result, viable):
         """Write server test results to the log file"""
@@ -1427,7 +1312,7 @@ class MullvadTester:
             
         # Display in terminal if interactive
         if self.interactive:
-            print_header(title)
+            self.ui.header(title)
             print(separator)
             if COLOR_SUPPORT: print(f"{Fore.CYAN}{header}{Style.RESET_ALL}")
             else: print(header)
@@ -1525,11 +1410,11 @@ class MullvadTester:
                         f.write(f"Average Latency: {avg_latency:.2f} ms\n")
                         
                         if self.interactive:
-                            print_header("GLOBAL STATISTICS")
-                            print_info(f"Average connection time: {avg_connection_time:.2f} seconds")
-                            print_info(f"Average download speed: {avg_download:.2f} Mbps")
-                            print_info(f"Average upload speed: {avg_upload:.2f} Mbps")
-                            print_info(f"Average latency: {avg_latency:.2f} ms")
+                            self.ui.header("GLOBAL STATISTICS")
+                            self.ui.info(f"Average connection time: {avg_connection_time:.2f} seconds")
+                            self.ui.info(f"Average download speed: {avg_download:.2f} Mbps")
+                            self.ui.info(f"Average upload speed: {avg_upload:.2f} Mbps")
+                            self.ui.info(f"Average latency: {avg_latency:.2f} ms")
                             print("")
                     else: f.write("\nNo valid test results available for statistics\n")
 
@@ -1544,7 +1429,7 @@ class MullvadTester:
                         )
                         
                         if self.interactive:
-                            print_header("BEST SERVERS DETAILS")
+                            self.ui.header("BEST SERVERS DETAILS")
                             for hostname, score in best_servers[:3]:
                                 server = next(s for s in self.servers if s.hostname == hostname)
                                 speed_result, mtr_result, _ = self.results[hostname]
@@ -1560,12 +1445,13 @@ class MullvadTester:
                     f.write(f"Consider increasing the distance range or checking your connection.\n")
                     
                     if self.interactive:
-                        print_warning("No viable servers found.")
-                        print_info("Consider increasing the distance range or checking your connection.")
+                        self.ui.warning("No viable servers found.")
+                        self.ui.info("Consider increasing the distance range or checking your connection.")
 
         except Exception as e:
             logger.error(f"Error generating summary: {e}")
-            if self.interactive: print_error(f"Error generating summary: {e}")
+            if self.interactive:
+                self.ui.error(f"Error generating summary: {e}")
 
     def _calculate_best_overall_servers(self, viable_hostname_set):
         """Calculate best overall servers using a weighted scoring system"""
@@ -1590,19 +1476,21 @@ class MullvadTester:
             logger.error(f"Error calculating best servers: {e}")
             return []
 
-def input_custom_parameters(args):
+def input_custom_parameters(args, ui):
     """Interactive function to customize test parameters before the summary"""
-    if not args.interactive: return args  # In non-interactive mode, use command-line parameters
-    
-    print_header("CUSTOMIZATION OF TEST PARAMETERS")
-    print_info("You can customize the test parameters before starting.")
-    print_info("Press Enter to keep the default values.")
+    if not args.interactive:
+        return args  # In non-interactive mode, use command-line parameters
+
+    ui.header("CUSTOMIZATION OF TEST PARAMETERS")
+    ui.info("You can customize the test parameters before starting.")
+    ui.info("Press Enter to keep the default values.")
     print("")
-    
+
     # Get location if not provided
-    if args.location == DEFAULT_LOCATION: args.location = input_location()
-    
-    print_header("CUSTOMIZATION OF TEST CRITERIA")
+    if args.location == DEFAULT_LOCATION:
+        args.location = input_location(ui)
+
+    ui.header("CUSTOMIZATION OF TEST CRITERIA")
     try:
         # Get parameters with validation in a compact format
         params = [
@@ -1612,25 +1500,27 @@ def input_custom_parameters(args):
             ("Connection timeout (seconds)", "connection_timeout", float),
             ("Minimum number of viable servers", "min_viable_servers", int)
         ]
-        
+
         for prompt, param, converter in params:
             value = input(f"{prompt} [{getattr(args, param)}]: ").strip()
-            if value: setattr(args, param, converter(value))
-        
+            if value:
+                setattr(args, param, converter(value))
+
         # Handle max distance separately due to special None case
         if args.max_distance is None:
             max_distance_input = input("Maximum distance (km) [no limit]: ").strip()
-            if max_distance_input: args.max_distance = float(max_distance_input)
+            if max_distance_input:
+                args.max_distance = float(max_distance_input)
         else:
             max_distance_input = input(f"Maximum distance (km) [{args.max_distance}]: ").strip()
-            if max_distance_input: 
+            if max_distance_input:
                 args.max_distance = None if max_distance_input.lower() in ['none', 'no', '0'] else float(max_distance_input)
-        
-        print_success("Custom parameters saved.")
+
+        ui.success("Custom parameters saved.")
     except ValueError as e:
-        print_error(f"Input error: {e}")
-        print_warning("Using default values for invalid parameters.")
-    
+        ui.error(f"Input error: {e}")
+        ui.warning("Using default values for invalid parameters.")
+
     return args
 
 def check_dependencies():
@@ -1695,32 +1585,39 @@ def main():
     parser.set_defaults(interactive=len(sys.argv) <= 1)
     args = parser.parse_args()
 
+    ui = DisplayManager(args.interactive)
+
     # Check required dependencies after parsing arguments
     missing_deps = check_dependencies()
     if missing_deps:
-        print_error("Missing dependencies detected:")
-        for dep in missing_deps: print_error(f"- {dep}")
+        ui.error("Missing dependencies detected:")
+        for dep in missing_deps:
+            ui.error(f"- {dep}")
         print("\nPlease install these dependencies before running the script.")
-        if "speedtest-cli" in missing_deps: print("Install speedtest-cli: pip install speedtest-cli")
-        if "mtr" in missing_deps: print("Install mtr: use your package manager")
-        if "Mullvad VPN CLI" in missing_deps: print("Install Mullvad VPN from https://mullvad.net")
+        if "speedtest-cli" in missing_deps:
+            print("Install speedtest-cli: pip install speedtest-cli")
+        if "mtr" in missing_deps:
+            print("Install mtr: use your package manager")
+        if "Mullvad VPN CLI" in missing_deps:
+            print("Install Mullvad VPN from https://mullvad.net")
         sys.exit(1)
 
     # Print welcome message
-    print_welcome()
+    print_welcome(ui)
 
     # Check optional dependencies
     suggested_deps = check_optional_dependencies()
     if suggested_deps:
-        print_info("Recommended optional dependencies:")
-        for dep in suggested_deps: print(f"- {dep}")
+        ui.info("Recommended optional dependencies:")
+        for dep in suggested_deps:
+            print(f"- {dep}")
         print("")
 
     # Customize parameters in interactive mode
-    args = input_custom_parameters(args)
+    args = input_custom_parameters(args, ui)
 
     # Display parameter summary
-    display_parameters_summary(args, countdown_seconds=5)
+    display_parameters_summary(args, ui, countdown_seconds=5)
 
     # Create tester and run tests
     tester = MullvadTester(
