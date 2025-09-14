@@ -35,11 +35,7 @@ CONTINENT_MAPPING = {
     'Africa': ['za', 'eg', 'ng', 'ke', 'ma']
 }
 
-COUNTRY_TO_CONTINENT = {
-    code: continent
-    for continent, codes in CONTINENT_MAPPING.items()
-    for code in codes
-}
+COUNTRY_TO_CONTINENT = {code: continent for continent, codes in CONTINENT_MAPPING.items() for code in codes}
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s',
@@ -530,8 +526,9 @@ class MullvadTester:
             filtered_servers = []
             for server in servers_list:
                 country_code = server.hostname.split('-')[0]
-                if exclude_continent and COUNTRY_TO_CONTINENT.get(country_code) != exclude_continent:
-                    filtered_servers.append(server)
+                if exclude_continent and COUNTRY_TO_CONTINENT.get(country_code) == exclude_continent:
+                    continue
+                filtered_servers.append(server)
             servers_list = filtered_servers
         
         # If no servers after filtering, return empty list
