@@ -26,12 +26,12 @@ SYMBOLS = {
     'success': '✓', 'error': '✗', 'warning': '⚠', 'info': 'ℹ',
     'connecting': '→', 'testing': '⋯', 'bullet': '•',
     'right_arrow': '→', 'speedometer': '🔄', 'clock': '⏱', 'globe': '🌐',
-    'server': '🖥 ', 'signal': '📶', 'download': '⬇', 'upload': '⬆',
+    'server': '🖥', 'signal': '📶', 'download': '⬇', 'upload': '⬆',
     'ping': '📡', 'checkmark': '✓', 'cross': '✗',
 }
 ASCII_SYMBOLS = {k: v for k, v in zip(SYMBOLS.keys(),
                                      ['+', 'x', '!', 'i', '>', '...', '*', '->', 'O', 'T',
-                                      'G', 'S ', '^', 'D', 'U', 'P', 'V', 'X'])}
+                                      'G', 'S', '^', 'D', 'U', 'P', 'V', 'X'])}
 
 # Check if terminal supports Unicode
 try:
@@ -124,7 +124,7 @@ def print_connection_status(hostname: str, status: str, time_taken: Optional[flo
 
 
 def format_server_info(server) -> str:
-    hostname_part = colorize(f"{get_symbol('server')}{server.hostname}", Fore.CYAN)
+    hostname_part = colorize(f"{get_symbol('server').rstrip()} {server.hostname}", Fore.CYAN)
     location_part = colorize(f"({server.city}, {server.country})", Fore.WHITE)
     distance_part = colorize(f"{server.distance_km:.0f} km", Fore.YELLOW)
     return f"{hostname_part} {location_part} {distance_part}"
