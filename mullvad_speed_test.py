@@ -5,6 +5,7 @@ from typing import List, Dict, Tuple, Optional, Set, Union, Any
 from dataclasses import dataclass
 from datetime import datetime
 from functools import lru_cache
+from collections import defaultdict
 import argparse
 from ui.display_manager import (
     DisplayManager,
@@ -535,22 +536,21 @@ class MullvadTester:
         # If no servers after filtering, return empty list
         if not servers_list: return []
         
-        # Group by country and city (more efficient grouping)
-        country_city_servers = {}
+        # Group servers by country and city
+        country_city_servers = defaultdict(lambda: defaultdict(list))
         for server in servers_list:
             country_code = server.hostname.split('-')[0]
-            city = server.city
-            if country_code not in country_city_servers:
-                country_city_servers[country_code] = {}
-            country_city_servers[country_code].setdefault(city, []).append(server)
+            country_city_servers[country_code][server.city].append(server)
 
         self.ui.info(f"Selecting up to {max_total_servers} servers (max {max_per_country} per country)")
         
         # Sort countries by distance
         countries_by_distance = []
         for country_code, cities in country_city_servers.items():
-            min_distance = min(min(server.distance_km for server in servers) 
-                             for city, servers in cities.items())
+            min_distance = min(
+                min(server.distance_km for server in servers)
+                for servers in cities.values()
+            )
             countries_by_distance.append((country_code, min_distance))
         countries_by_distance.sort(key=lambda x: x[1])
         
@@ -579,7 +579,10 @@ class MullvadTester:
             # Fill any remaining slots for this country
             if len(country_servers) < max_per_country:
                 remaining = max_per_country - len(country_servers)
-                remaining_servers = [s for city in cities for s in cities[city] if s not in country_servers]
+                remaining_servers = [
+                    s for city_servers in cities.values() for s in city_servers
+                    if s not in country_servers
+                ]
                 random.shuffle(remaining_servers)
                 country_servers.extend(remaining_servers[:remaining])
                 
