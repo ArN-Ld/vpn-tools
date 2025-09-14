@@ -4,7 +4,7 @@ import subprocess
 import threading
 import time
 from itertools import cycle
-from typing import Optional
+from typing import Optional, Protocol
 
 # Try to import colorama for color support
 try:
@@ -40,6 +40,15 @@ try:
     USE_UNICODE = True
 except UnicodeEncodeError:
     USE_UNICODE = False
+
+
+class ServerInfo(Protocol):
+    """Minimal server information required for display formatting."""
+
+    hostname: str
+    city: str
+    country: str
+    distance_km: float
 
 
 def colorize(text: str, color: str = "") -> str:
@@ -129,7 +138,7 @@ def print_connection_status(hostname: str, status: str, time_taken: Optional[flo
             print(msg)
 
 
-def format_server_info(server) -> str:
+def format_server_info(server: ServerInfo) -> str:
     hostname_part = colorize(f"{get_symbol('server').rstrip()} {server.hostname}", Fore.CYAN)
     location_part = colorize(f"({server.city}, {server.country})", Fore.WHITE)
     distance_part = colorize(f"{server.distance_km:.0f} km", Fore.YELLOW)
