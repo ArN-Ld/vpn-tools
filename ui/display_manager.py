@@ -41,6 +41,11 @@ except UnicodeEncodeError:
     USE_UNICODE = False
 
 
+def colorize(text: str, color: str = "") -> str:
+    """Return text wrapped in ANSI color codes if supported."""
+    return f"{color}{text}{Style.RESET_ALL}" if COLOR_SUPPORT and color else text
+
+
 def get_symbol(name: str) -> str:
     """Return a symbol by name, respecting Unicode support."""
     return SYMBOLS.get(name, '') if USE_UNICODE else ASCII_SYMBOLS.get(name, '')
@@ -116,6 +121,31 @@ def print_connection_status(hostname: str, status: str, time_taken: Optional[flo
             print(f"{Fore.RED}{msg}{Style.RESET_ALL}")
         else:
             print(msg)
+
+
+def format_server_info(server) -> str:
+    hostname_part = colorize(f"{get_symbol('server')}{server.hostname}", Fore.CYAN)
+    location_part = colorize(f"({server.city}, {server.country})", Fore.WHITE)
+    distance_part = colorize(f"{server.distance_km:.0f} km", Fore.YELLOW)
+    return f"{hostname_part} {location_part} {distance_part}"
+
+
+def format_mtr_results(result) -> str:
+    msg = (
+        f"{get_symbol('ping')} Latency: {result.avg_latency:.2f} ms | "
+        f"Loss: {result.packet_loss:.2f}% | Hops: {result.hops}"
+    )
+    return colorize(msg, Fore.YELLOW)
+
+
+def format_speedtest_results(result) -> str:
+    download = colorize(f"{get_symbol('download')} {result.download_speed:.2f} Mbps", Fore.GREEN)
+    upload = colorize(f"{get_symbol('upload')} {result.upload_speed:.2f} Mbps", Fore.BLUE)
+    ping = colorize(f"{get_symbol('ping')} {result.ping:.2f} ms", Fore.YELLOW)
+    return (
+        f"{download} | {upload} | {ping} | "
+        f"Jitter: {result.jitter:.2f} ms | Loss: {result.packet_loss:.2f}%"
+    )
 
 
 def print_progress_bar(iteration: float, total: float, prefix: str = '',

@@ -10,9 +10,12 @@ from ui.display_manager import (
     DisplayManager,
     get_symbol,
     get_terminal_width,
-    COLOR_SUPPORT,
     Fore,
     Style,
+    colorize,
+    format_server_info,
+    format_mtr_results,
+    format_speedtest_results,
 )
 
 # Constants
@@ -52,29 +55,6 @@ class SpeedTestResult:
 class MtrResult:
     avg_latency: float; packet_loss: float; hops: int
 
-def format_server_info(server):
-    """Format server information nicely"""
-    if COLOR_SUPPORT:
-        return f"{Fore.CYAN}{get_symbol('server')}{server.hostname} {Fore.WHITE}({server.city}, {server.country}) {Fore.YELLOW}{server.distance_km:.0f} km"
-    return f"{get_symbol('server')}{server.hostname} ({server.city}, {server.country}) {server.distance_km:.0f} km"
-
-def format_mtr_results(result):
-    """Format MTR results nicely"""
-    if COLOR_SUPPORT:
-        return f"{Fore.YELLOW}{get_symbol('ping')} Latency: {result.avg_latency:.2f} ms | Loss: {result.packet_loss:.2f}% | Hops: {result.hops}"
-    return f"{get_symbol('ping')} Latency: {result.avg_latency:.2f} ms | Loss: {result.packet_loss:.2f}% | Hops: {result.hops}"
-
-def format_speedtest_results(result):
-    """Format speedtest results nicely"""
-    if COLOR_SUPPORT:
-        return (f"{Fore.GREEN}{get_symbol('download')} {result.download_speed:.2f} Mbps | "
-            f"{Fore.BLUE}{get_symbol('upload')} {result.upload_speed:.2f} Mbps | "
-            f"{Fore.YELLOW}{get_symbol('ping')} {result.ping:.2f} ms | "
-            f"Jitter: {result.jitter:.2f} ms | Loss: {result.packet_loss:.2f}%")
-    return (f"{get_symbol('download')} {result.download_speed:.2f} Mbps | "
-        f"{get_symbol('upload')} {result.upload_speed:.2f} Mbps | "
-        f"{get_symbol('ping')} {result.ping:.2f} ms | "
-        f"Jitter: {result.jitter:.2f} ms | Loss: {result.packet_loss:.2f}%")
 
 def display_parameters_summary(args, ui, countdown_seconds=5):
     """Display a summary of all parameters with a countdown"""
@@ -100,8 +80,7 @@ def display_parameters_summary(args, ui, countdown_seconds=5):
     try:
         for i in range(countdown_seconds, 0, -1):
             sys_msg = f"Starting in {i} seconds..."
-            if COLOR_SUPPORT: print(f"\r{Fore.YELLOW}{sys_msg}{Style.RESET_ALL}", end="")
-            else: print(f"\r{sys_msg}", end="")
+            print(f"\r{colorize(sys_msg, Fore.YELLOW)}", end="")
             sys.stdout.flush()
             time.sleep(1)
         print("\rStarting tests... ")
@@ -184,14 +163,9 @@ def print_welcome(ui):
 | |  | | |_| | | | |\ V / (_| | (_| |   \  /  | |   | |\  |   | |  __/\__ \ ||  __/ |
 |_|  |_|\__,_|_|_|_| \_/ \__,_|\__,_|    \/   |_|   |_| \_|   |_|\___||___/\__\___|_|
     """
-    if COLOR_SUPPORT:
-        print(f"{Fore.CYAN}{Style.BRIGHT}{title}{Style.RESET_ALL}")
-        print(f"{Fore.GREEN}{Style.BRIGHT}Mullvad VPN Server Performance Tester{Style.RESET_ALL}")
-        print(f"{Fore.YELLOW}Optimized Version with Enhanced Features{Style.RESET_ALL}")
-    else:
-        print(title)
-        print("Mullvad VPN Server Performance Tester")
-        print("Optimized Version with Enhanced Features")
+    print(colorize(title, Fore.CYAN + Style.BRIGHT))
+    print(colorize("Mullvad VPN Server Performance Tester", Fore.GREEN + Style.BRIGHT))
+    print(colorize("Optimized Version with Enhanced Features", Fore.YELLOW))
     print("")
 
 # Main Mullvad Tester Class
@@ -785,14 +759,7 @@ class MullvadTester:
             logger.info(f"Connecting to server {server.hostname} ({server.city}, {server.country})...")
             if self.interactive:
                 self.ui.header(f"SERVER TEST: {server.hostname}")
-                if COLOR_SUPPORT:
-                    print(f"{Fore.CYAN}{get_symbol('server').rstrip()}  {server.hostname} "
-                        f"{Fore.WHITE}({server.city}, {server.country}) "
-                        f"{Fore.YELLOW}{server.distance_km:.0f} km{Style.RESET_ALL}")
-                else:
-                    print(f"{get_symbol('server').rstrip()}  {server.hostname} "
-                        f"({server.city}, {server.country}) "
-                        f"{server.distance_km:.0f} km")
+                print(format_server_info(server))
                 self.ui.connection_status(server.hostname, "connecting")
 
             connection_start_time = time.time()
@@ -1268,8 +1235,7 @@ class MullvadTester:
         if self.interactive:
             self.ui.header(title)
             print(separator)
-            if COLOR_SUPPORT: print(f"{Fore.CYAN}{header}{Style.RESET_ALL}")
-            else: print(header)
+            print(colorize(header, Fore.CYAN))
             print(separator)
             for row in rows: print(row)
             print(separator)
@@ -1386,12 +1352,16 @@ class MullvadTester:
                             for hostname, score in best_servers[:3]:
                                 server = next(s for s in self.servers if s.hostname == hostname)
                                 speed_result, mtr_result, _ = self.results[hostname]
-                                if COLOR_SUPPORT:
-                                    print(f"{Fore.CYAN}{hostname} {Fore.RESET}({server.city}, {server.country}): Score {Fore.GREEN}{score:.2f}")
-                                    print(f"  → {Fore.GREEN}↓{speed_result.download_speed:.1f} Mbps {Fore.BLUE}↑{speed_result.upload_speed:.1f} Mbps {Fore.YELLOW}⏱{mtr_result.avg_latency:.1f} ms, Loss: {mtr_result.packet_loss:.1f}%")
-                                else:
-                                    print(f"{hostname} ({server.city}, {server.country}): Score {score:.2f}")
-                                    print(f"  → ↓{speed_result.download_speed:.1f} Mbps ↑{speed_result.upload_speed:.1f} Mbps ⏱{mtr_result.avg_latency:.1f} ms, Loss: {mtr_result.packet_loss:.1f}%")
+                                print(
+                                    f"{colorize(hostname, Fore.CYAN)} ({server.city}, {server.country}): "
+                                    f"Score {colorize(f'{score:.2f}', Fore.GREEN)}"
+                                )
+                                print(
+                                    f"  → {colorize('↓'+f'{speed_result.download_speed:.1f} Mbps', Fore.GREEN)} "
+                                    f"{colorize('↑'+f'{speed_result.upload_speed:.1f} Mbps', Fore.BLUE)} "
+                                    f"{colorize('⏱'+f'{mtr_result.avg_latency:.1f} ms', Fore.YELLOW)}, "
+                                    f"Loss: {mtr_result.packet_loss:.1f}%"
+                                )
                             print("")
                 else:
                     f.write("\nNo viable servers found.\n")
