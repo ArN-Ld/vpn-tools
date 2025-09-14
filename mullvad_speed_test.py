@@ -228,18 +228,31 @@ class MullvadTester:
             self.ui.info(f"Reference location: {reference_location}")
             self.ui.info(f"Coordinates: ({self.reference_coords[0]:.4f}, {self.reference_coords[1]:.4f})")
 
+    def log_and_info(self, message):
+        """Log an info message and display it to the user."""
+        logger.info(message)
+        self.ui.info(message)
+
+    def log_and_warning(self, message):
+        """Log a warning message and display it to the user."""
+        logger.warning(message)
+        self.ui.warning(message)
+
+    def log_and_error(self, message):
+        """Log an error message and display it to the user."""
+        logger.error(message)
+        self.ui.error(message)
+
     def _load_coords_cache(self):
         """Load coordinates cache from disk if it exists"""
         if os.path.exists(COORDS_CACHE_FILE):
             try:
                 with open(COORDS_CACHE_FILE, 'rb') as f:
                     cache = pickle.load(f)
-                    logger.info(f"Loaded {len(cache)} location coordinates from cache")
-                    self.ui.info(f"Loaded {len(cache)} coordinates from cache")
+                    self.log_and_info(f"Loaded {len(cache)} coordinates from cache")
                     return cache
             except Exception as e:
-                logger.warning(f"Could not load coordinates cache: {e}")
-                self.ui.warning(f"Could not load coordinates cache: {e}")
+                self.log_and_warning(f"Could not load coordinates cache: {e}")
         return {}
 
     def _save_coords_cache(self):
@@ -277,15 +290,13 @@ class MullvadTester:
                 c.execute("PRAGMA table_info(server_results)")
                 columns = [column[1] for column in c.fetchall()]
                 if 'viable' not in columns:
-                    logger.info("Adding 'viable' column to server_results table")
+                    self.log_and_info("Adding 'viable' column to server_results table")
                     c.execute("ALTER TABLE server_results ADD COLUMN viable INTEGER DEFAULT 0")
-                    self.ui.info("Adding 'viable' column to existing database")
 
                 conn.commit()
             logger.info("Database initialized successfully")
         except Exception as e:
-            logger.error(f"Error initializing database: {e}")
-            self.ui.error(f"Error initializing database: {e}")
+            self.log_and_error(f"Error initializing database: {e}")
 
     def _get_location_coordinates(self):
         """Get coordinates for reference location"""
@@ -294,8 +305,7 @@ class MullvadTester:
         # Check cache first
         if location in self.coords_cache:
             coords = self.coords_cache[location]
-            logger.info(f"Using cached coordinates for {location}: {coords}")
-            self.ui.info(f"Using cached coordinates for {location}: {coords}")
+            self.log_and_info(f"Using cached coordinates for {location}: {coords}")
             return coords
 
         # Load geopy modules
@@ -363,8 +373,7 @@ class MullvadTester:
         """Parse mullvad relay list output to get server information"""
         servers = []
         try:
-            logger.info("Fetching Mullvad server list...")
-            self.ui.info("Retrieving Mullvad server list...")
+            self.log_and_info("Retrieving Mullvad server list...")
                 
             output = subprocess.check_output(["mullvad", "relay", "list"], text=True)
             
@@ -414,15 +423,13 @@ class MullvadTester:
             return sorted(servers, key=lambda x: x.distance_km)
             
         except subprocess.CalledProcessError as e:
-            logger.error(f"Error getting server list: {e}")
-            self.ui.error(f"Error retrieving server list: {e}")
+            self.log_and_error(f"Error retrieving server list: {e}")
             self.ui.warning("Please verify that Mullvad VPN is correctly installed and configured.")
             if self.interactive:
                 sys.exit(1)
             return []
         except Exception as e:
-            logger.error(f"Unexpected error while getting server list: {e}")
-            self.ui.error(f"Unexpected error retrieving server list: {e}")
+            self.log_and_error(f"Unexpected error retrieving server list: {e}")
             if self.interactive:
                 sys.exit(1)
             return []
@@ -504,11 +511,9 @@ class MullvadTester:
             return avg_conn_time
         else:
             self.connection_timeout = self.default_connection_timeout
-            
-            self.ui.warning("No servers responded, using default timeout")
+
+            self.log_and_warning("No servers responded during calibration, using default timeout")
             self.ui.info(f"Connection timeout: {self.connection_timeout:.2f}s")
-            
-            logger.warning("No servers responded during calibration, using default timeout")
             return None
 
     def _select_servers(self, servers_list, max_per_country=5, max_total_servers=None, 
@@ -630,8 +635,7 @@ class MullvadTester:
     def _run_speedtest(self):
         """Run speedtest-cli and return results"""
         try:
-            logger.info("Running speedtest...")
-            self.ui.info("Running speed test...")
+            self.log_and_info("Running speed test...")
                 
             cmd = ["speedtest-cli", "--json", "--secure", "--timeout", "20"]
 
@@ -700,8 +704,7 @@ class MullvadTester:
     def _run_mtr(self):
         """Run mtr and return results"""
         try:
-            logger.info(f"Running MTR to {self.target_host}...")
-            self.ui.info(f"Running MTR test to {self.target_host}...")
+            self.log_and_info(f"Running MTR test to {self.target_host}...")
                 
             count, timeout = 10, 60
             
@@ -721,8 +724,7 @@ class MullvadTester:
             # Parse MTR output efficiently
             lines = output.strip().split('\n')[1:]  # Skip header
             if not lines:
-                logger.warning("No MTR results received")
-                self.ui.warning("No MTR results received")
+                self.log_and_warning("No MTR results received")
                 return MtrResult(0, 100, 0)
 
             # Extract data from last line (direct access instead of multiple splits)
@@ -927,8 +929,7 @@ class MullvadTester:
 
         protocol_servers = [s for s in self.servers if protocol.lower() in s.protocol.lower()]
         if not protocol_servers:
-            logger.error(f"No servers found for protocol: {protocol}")
-            self.ui.error(f"No servers found for protocol {protocol}")
+            self.log_and_error(f"No servers found for protocol {protocol}")
             return None
 
         avg_time = self.run_connection_calibration()
@@ -1095,8 +1096,7 @@ class MullvadTester:
             remaining_servers = [s for s in remaining_servers if s not in additional_servers]
             return additional_servers, remaining_servers
 
-        logger.warning("No more servers available for additional testing")
-        self.ui.warning("No more servers available for additional testing")
+        self.log_and_warning("No more servers available for additional testing")
         return [], remaining_servers
 
     def _write_summary(self, results_file, viable_servers, tested_count):
@@ -1132,8 +1132,7 @@ class MullvadTester:
                     except Exception as e:
                         self.ui.error(f"Unable to open file: {e}")
         else:
-            logger.error("No test results available to generate summary")
-            self.ui.error("No test results available to generate a summary.")
+            self.log_and_error("No test results available to generate a summary.")
 
     def run_tests(self, protocol="WireGuard", max_servers=None, max_distance=None):
         """Run tests on servers"""
@@ -1361,8 +1360,7 @@ class MullvadTester:
                     self.ui.info("Consider increasing the distance range or checking your connection.")
 
         except Exception as e:
-            logger.error(f"Error generating summary: {e}")
-            self.ui.error(f"Error generating summary: {e}")
+            self.log_and_error(f"Error generating summary: {e}")
 
     def _calculate_best_overall_servers(self, viable_hostname_set):
         """Calculate best overall servers using a weighted scoring system"""
