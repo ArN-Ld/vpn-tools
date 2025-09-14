@@ -42,6 +42,31 @@ CONTINENT_MAPPING = {
 
 COUNTRY_TO_CONTINENT = {code: continent for continent, codes in CONTINENT_MAPPING.items() for code in codes}
 
+# Keywords (country names, city names, country codes) mapped to continents
+KEYWORD_TO_CONTINENT = {
+    **COUNTRY_TO_CONTINENT,
+    # Country and city names
+    'china': 'Asia',
+    'beijing': 'Asia',
+    'japan': 'Asia',
+    'singapore': 'Asia',
+    'france': 'Europe',
+    'germany': 'Europe',
+    'uk': 'Europe',
+    'london': 'Europe',
+    'kingdom': 'Europe',
+    'usa': 'North America',
+    'states': 'North America',
+    'canada': 'North America',
+    'mexico': 'North America',
+    'brazil': 'South America',
+    'argentina': 'South America',
+    'australia': 'Oceania',
+    'zealand': 'Oceania',
+    'africa': 'Africa',
+    'egypt': 'Africa',
+}
+
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s',
                    handlers=[logging.FileHandler('mullvad_speed_test.log')])
@@ -417,28 +442,13 @@ class MullvadTester:
 
     def _get_location_continent(self, location):
         """Determine which continent a location is in"""
-        location_continents = {
-            'china': 'Asia', 'beijing': 'Asia', 'japan': 'Asia', 'singapore': 'Asia',
-            'france': 'Europe', 'germany': 'Europe', 'uk': 'Europe', 'london': 'Europe',
-            'usa': 'North America', 'united states': 'North America', 'canada': 'North America',
-            'brazil': 'South America', 'argentina': 'South America',
-            'australia': 'Oceania', 'new zealand': 'Oceania',
-            'south africa': 'Africa', 'egypt': 'Africa'
-        }
-        
         location_lower = location.lower().replace(',', ' ').replace('.', ' ')
-        
-        # Try all possible matches for efficiency
-        for continent in CONTINENT_MAPPING:
-            if continent.lower() in location_lower: return continent
-            
-        for loc, continent in location_continents.items():
-            if loc in location_lower: return continent
 
-        for code, continent in COUNTRY_TO_CONTINENT.items():
-            if code in location_lower:
+        for token in location_lower.split():
+            continent = KEYWORD_TO_CONTINENT.get(token)
+            if continent:
                 return continent
-        
+
         logger.warning(f"Could not determine continent for {location}, defaulting to Europe")
         return "Europe"
         
