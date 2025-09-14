@@ -232,79 +232,59 @@ class DisplayManager:
 
     def __init__(self, interactive: bool):
         self.interactive = interactive
+        if not self.interactive:
+            noop = lambda *args, **kwargs: None
+            self.success = noop
+            self.error = noop
+            self.warning = noop
+            self.info = noop
+            self.header = noop
+            self.connection_status = noop
+            self.progress_bar = noop
+            self.spinner = noop
+            self.run_command_with_spinner = noop
 
     def success(self, message: str) -> None:
-        if self.interactive:
-            print_success(message)
+        print_success(message)
 
     def error(self, message: str) -> None:
-        if self.interactive:
-            print_error(message)
+        print_error(message)
 
     def warning(self, message: str) -> None:
-        if self.interactive:
-            print_warning(message)
+        print_warning(message)
 
     def info(self, message: str) -> None:
-        if self.interactive:
-            print_info(message)
+        print_info(message)
 
     def header(self, title: str, width: Optional[int] = None) -> None:
-        if self.interactive:
-            print_header(title, width)
+        print_header(title, width)
 
     def connection_status(self, hostname: str, status: str, time_taken: Optional[float] = None) -> None:
-        if self.interactive:
-            print_connection_status(hostname, status, time_taken)
+        print_connection_status(hostname, status, time_taken)
 
     def progress_bar(self, *args, **kwargs) -> None:
-        if self.interactive:
-            print_progress_bar(*args, **kwargs)
+        print_progress_bar(*args, **kwargs)
 
     def spinner(self, message, action, timeout=None):
-        if self.interactive:
-            return run_with_spinner(message, action, timeout)
-        # Non-interactive: run action directly
-        stop_event = threading.Event()
-        start = time.time()
-        value = action(stop_event)
-        elapsed = time.time() - start
-        return value, False, elapsed
+        return run_with_spinner(message, action, timeout)
 
     def run_command_with_spinner(self, cmd, message, timeout=None):
         """Run a subprocess command while displaying a spinner.
 
         Returns (stdout, stderr, returncode, timed_out, elapsed)."""
-        if self.interactive:
-            def action(stop_event):
-                process = subprocess.Popen(
-                    cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-                )
-                while process.poll() is None and not stop_event.is_set():
-                    time.sleep(0.1)
-                if process.poll() is None:
-                    process.terminate()
-                stdout, stderr = process.communicate()
-                return stdout, stderr, process.returncode
 
-            (stdout, stderr, returncode), timed_out, elapsed = self.spinner(
-                message, action, timeout=timeout
+        def action(stop_event):
+            process = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
             )
-            return stdout, stderr, returncode, timed_out, elapsed
+            while process.poll() is None and not stop_event.is_set():
+                time.sleep(0.1)
+            if process.poll() is None:
+                process.terminate()
+            stdout, stderr = process.communicate()
+            return stdout, stderr, process.returncode
 
-        start = time.time()
-        try:
-            completed = subprocess.run(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=timeout
-            )
-            return (
-                completed.stdout,
-                completed.stderr,
-                completed.returncode,
-                False,
-                time.time() - start,
-            )
-        except subprocess.TimeoutExpired:
-            return "", "", None, True, time.time() - start
-        except Exception as e:  # pragma: no cover - unexpected errors
-            return "", str(e), 1, False, time.time() - start
+        (stdout, stderr, returncode), timed_out, elapsed = self.spinner(
+            message, action, timeout=timeout
+        )
+        return stdout, stderr, returncode, timed_out, elapsed
