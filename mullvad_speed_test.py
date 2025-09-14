@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Mullvad VPN Server Performance Tester - Optimized Version"""
-import subprocess, json, re, time, os, pickle, sqlite3, statistics, logging, sys, random, threading
-from typing import List, Dict, Tuple, Optional, Set, Union, Any
+import subprocess, json, re, time, os, pickle, sqlite3, statistics, logging, sys, random
+from typing import List, Dict, Tuple, Optional, Set
 from dataclasses import dataclass
 from datetime import datetime
-from functools import lru_cache
 from collections import defaultdict
 import argparse
 from ui.display_manager import (
