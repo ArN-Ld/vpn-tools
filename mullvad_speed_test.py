@@ -672,63 +672,38 @@ class MullvadTester:
                 
             cmd = ["speedtest-cli", "--json", "--secure", "--timeout", "20"]
 
-            if self.interactive:
-                def action(stop_event):
-                    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                    while process.poll() is None and not stop_event.is_set():
-                        time.sleep(0.1)
-                    if process.poll() is None:
-                        process.terminate()
-                    stdout, stderr = process.communicate()
-                    return stdout, stderr, process.returncode
+            stdout, stderr, returncode, timed_out, elapsed_time = self.ui.run_command_with_spinner(
+                cmd, f"{get_symbol('speedometer')} Speed test in progress", MAX_SPEEDTEST_TIME
+            )
 
-                result, timed_out, elapsed_time = self.ui.spinner(
-                    f"{get_symbol('speedometer')} Speed test in progress",
-                    action,
-                    timeout=MAX_SPEEDTEST_TIME,
+            if timed_out:
+                self.ui.info(f"Speed test canceled after {MAX_SPEEDTEST_TIME}s (maximum time reached)")
+                return SpeedTestResult(0, 0, 0, 0, 100)
+
+            if elapsed_time < MIN_SPEEDTEST_TIME:
+                self.ui.info(
+                    f"{get_symbol('speedometer')} Speed test completed too quickly ({elapsed_time:.1f}s), may be unreliable"
                 )
+                logger.warning(
+                    f"Speed test completed too quickly: {elapsed_time:.2f}s < {MIN_SPEEDTEST_TIME}s minimum"
+                )
+                time.sleep(1)
 
-                if timed_out:
-                    self.ui.info(f"Speed test canceled after {MAX_SPEEDTEST_TIME}s (maximum time reached)")
-                    return SpeedTestResult(0, 0, 0, 0, 100)
+            if returncode != 0:
+                if stderr and "403: Forbidden" in stderr:
+                    self.ui.info("Speedtest service unavailable from this VPN server (IP likely blocked)")
+                    logger.warning("Speedtest service blocked this VPN server's IP address (403 Forbidden)")
+                else:
+                    self.ui.info(f"Speed test failed: {stderr if stderr else 'Unknown error'}")
+                    logger.error(f"Speedtest failed: {stderr}")
+                return SpeedTestResult(0, 0, 0, 0, 100)
 
-                stdout, stderr, returncode = result
-
-                if elapsed_time < MIN_SPEEDTEST_TIME:
-                    self.ui.info(f"{get_symbol('speedometer')} Speed test completed too quickly ({elapsed_time:.1f}s), may be unreliable")
-                    logger.warning(f"Speed test completed too quickly: {elapsed_time:.2f}s < {MIN_SPEEDTEST_TIME}s minimum")
-                    time.sleep(1)
-
-                if returncode != 0:
-                    if stderr and "403: Forbidden" in stderr:
-                        self.ui.info("Speedtest service unavailable from this VPN server (IP likely blocked)")
-                        logger.warning("Speedtest service blocked this VPN server's IP address (403 Forbidden)")
-                    else:
-                        self.ui.info(f"Speed test failed: {stderr if stderr else 'Unknown error'}")
-                        logger.error(f"Speedtest failed: {stderr}")
-                    return SpeedTestResult(0, 0, 0, 0, 100)
-
-                print(f"\r{' ' * get_terminal_width()}", end='\r')
-
-                try:
-                    data = json.loads(stdout)
-                except json.JSONDecodeError as e:
-                    self.ui.info("Speed test results not usable (JSON parsing error)")
-                    logger.error(f"JSON parse error on output: {e}")
-                    return SpeedTestResult(0, 0, 0, 0, 100)
-            else:
-                result = run_command(cmd, timeout=MAX_SPEEDTEST_TIME)
-
-                if result is None or isinstance(result, Exception) or result.returncode != 0:
-                    logger.error("Speedtest failed")
-                    return SpeedTestResult(0, 0, 0, 0, 100)
-
-                stdout = result.stdout
-                try:
-                    data = json.loads(stdout)
-                except json.JSONDecodeError as e:
-                    logger.error(f"Failed to decode JSON from speedtest result: {e}")
-                    return SpeedTestResult(0, 0, 0, 0, 100)
+            try:
+                data = json.loads(stdout)
+            except json.JSONDecodeError as e:
+                self.ui.info("Speed test results not usable (JSON parsing error)")
+                logger.error(f"JSON parse error on output: {e}")
+                return SpeedTestResult(0, 0, 0, 0, 100)
 
             # Check required fields
             required_fields = ['download', 'upload', 'ping']
@@ -767,37 +742,18 @@ class MullvadTester:
                 
             count, timeout = 10, 60
             
-            if self.interactive:
-                def action(stop_event):
-                    process = subprocess.Popen(
-                        ["sudo", "mtr", "-n", "-c", str(count), "-r", self.target_host],
-                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-                    )
-                    while process.poll() is None and not stop_event.is_set():
-                        time.sleep(0.1)
-                    if process.poll() is None:
-                        process.terminate()
-                    stdout, stderr = process.communicate()
-                    return stdout, stderr, process.returncode
+            cmd = ["sudo", "mtr", "-n", "-c", str(count), "-r", self.target_host]
+            stdout, stderr, returncode, timed_out, _ = self.ui.run_command_with_spinner(
+                cmd, f"{get_symbol('ping')} MTR test in progress", timeout
+            )
 
-                result, timed_out, _ = self.ui.spinner(
-                    f"{get_symbol('ping')} MTR test in progress",
-                    action,
-                    timeout=timeout,
-                )
+            if timed_out or returncode != 0:
+                self.ui.info("MTR test failed")
+                if returncode != 0:
+                    logger.error(f"MTR failed: {stderr}")
+                return MtrResult(0, 100, 0)
 
-                if timed_out or result[2] != 0:
-                    self.ui.info("MTR test failed")
-                    return MtrResult(0, 100, 0)
-
-                stdout, stderr, _ = result
-                output = stdout
-            else:
-                result = run_command(["sudo", "mtr", "-n", "-c", str(count), "-r", self.target_host], timeout=timeout)
-                if result is None or isinstance(result, Exception) or result.returncode != 0:
-                    logger.error("MTR test failed")
-                    return MtrResult(0, 100, 0)
-                output = result.stdout
+            output = stdout
 
             # Parse MTR output efficiently
             lines = output.strip().split('\n')[1:]  # Skip header

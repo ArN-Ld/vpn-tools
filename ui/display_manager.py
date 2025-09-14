@@ -1,5 +1,6 @@
 import sys
 import shutil
+import subprocess
 import threading
 import time
 from typing import Optional
@@ -239,3 +240,41 @@ class DisplayManager:
         value = action(stop_event)
         elapsed = time.time() - start
         return value, False, elapsed
+
+    def run_command_with_spinner(self, cmd, message, timeout=None):
+        """Run a subprocess command while displaying a spinner.
+
+        Returns (stdout, stderr, returncode, timed_out, elapsed)."""
+        if self.interactive:
+            def action(stop_event):
+                process = subprocess.Popen(
+                    cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                )
+                while process.poll() is None and not stop_event.is_set():
+                    time.sleep(0.1)
+                if process.poll() is None:
+                    process.terminate()
+                stdout, stderr = process.communicate()
+                return stdout, stderr, process.returncode
+
+            (stdout, stderr, returncode), timed_out, elapsed = self.spinner(
+                message, action, timeout=timeout
+            )
+            return stdout, stderr, returncode, timed_out, elapsed
+
+        start = time.time()
+        try:
+            completed = subprocess.run(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=timeout
+            )
+            return (
+                completed.stdout,
+                completed.stderr,
+                completed.returncode,
+                False,
+                time.time() - start,
+            )
+        except subprocess.TimeoutExpired:
+            return "", "", None, True, time.time() - start
+        except Exception as e:  # pragma: no cover - unexpected errors
+            return "", str(e), 1, False, time.time() - start
