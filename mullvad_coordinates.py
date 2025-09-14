@@ -6,6 +6,7 @@ This is used instead of relying on potentially incorrect coordinates from Mullva
 """
 
 import json
+import logging
 from pathlib import Path
 from typing import Dict, Tuple
 
@@ -23,7 +24,8 @@ def _load_coordinates() -> Dict[str, Tuple[float, float]]:
             with data_file.open() as f:
                 data = json.load(f)
             return {key: tuple(value) for key, value in data.items()}
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError) as e:
+            logging.error("Failed to load coordinates from %s: %s", data_file, e)
             pass
 
     return {}
