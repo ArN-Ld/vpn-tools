@@ -153,6 +153,22 @@ def format_speedtest_results(result) -> str:
     )
 
 
+# Progress bar color thresholds (percentage -> color name)
+PROGRESS_COLOR_THRESHOLDS = [
+    (16, "GREEN"),
+    (33, "LIGHTGREEN_EX"),
+    (50, "YELLOW"),
+    (66, "LIGHTYELLOW_EX"),
+    (83, "LIGHTRED_EX"),
+]
+
+# Fallback thresholds when extended colors aren't available
+FALLBACK_COLOR_THRESHOLDS = [
+    (33, "GREEN"),
+    (66, "YELLOW"),
+]
+
+
 def print_progress_bar(iteration: float, total: float, prefix: str = '',
                         suffix: str = '', length: int = 50, fill: str = '█') -> None:
     """Print a progress bar with gradient colors from green to red."""
@@ -162,26 +178,23 @@ def print_progress_bar(iteration: float, total: float, prefix: str = '',
 
     if COLOR_SUPPORT:
         try:
-            if percent <= 16:
-                color = Fore.GREEN
-            elif percent <= 33:
-                color = Fore.LIGHTGREEN_EX
-            elif percent <= 50:
-                color = Fore.YELLOW
-            elif percent <= 66:
-                color = Fore.LIGHTYELLOW_EX
-            elif percent <= 83:
-                color = Fore.LIGHTRED_EX
+            for threshold, color_name in PROGRESS_COLOR_THRESHOLDS:
+                if percent <= threshold:
+                    color = getattr(Fore, color_name)
+                    break
             else:
                 color = Fore.RED
         except AttributeError:  # pragma: no cover - limited color support
-            if percent <= 33:
-                color = Fore.GREEN
-            elif percent <= 66:
-                color = Fore.YELLOW
+            for threshold, color_name in FALLBACK_COLOR_THRESHOLDS:
+                if percent <= threshold:
+                    color = getattr(Fore, color_name)
+                    break
             else:
                 color = Fore.RED
-        print(f'\r{prefix} {color}{bar}{Style.RESET_ALL} {percent:.1f}% {suffix}', end='\r')
+        print(
+            f'\r{prefix} {color}{bar}{Style.RESET_ALL} {percent:.1f}% {suffix}',
+            end='\r',
+        )
     else:
         print(f'\r{prefix} {bar} {percent:.1f}% {suffix}', end='\r')
     if iteration == total:
