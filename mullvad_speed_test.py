@@ -961,26 +961,23 @@ class MullvadTester:
             logger.error(f"Error saving results to database: {e}")
             return False
 
-    def run_tests(self, protocol="WireGuard", max_servers=None, max_distance=None):
-        """Run tests on servers"""
+    def _prepare_session(self, protocol, max_servers, max_distance):
+        """Prepare testing session and return session data"""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         results_file = f"mullvad_test_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{protocol.lower()}.log"
-        if max_servers is None: max_servers = DEFAULT_MAX_SERVERS
+        if max_servers is None:
+            max_servers = DEFAULT_MAX_SERVERS
 
         self.successful_servers = 0
-        viable_servers = 0
-        
-        # Filter servers by protocol
+
         protocol_servers = [s for s in self.servers if protocol.lower() in s.protocol.lower()]
-        
         if not protocol_servers:
             logger.error(f"No servers found for protocol: {protocol}")
             self.ui.error(f"No servers found for protocol {protocol}")
-            return
-        
-        # Calibrate connection timeout
+            return None
+
         avg_time = self.run_connection_calibration()
-        
+
         self.ui.header("MULLVAD VPN TEST PARAMETERS")
         params = [
             f"Date                : {timestamp}",
@@ -995,15 +992,12 @@ class MullvadTester:
         for param in params:
             self.ui.info(param)
         self.ui.info("")
-            
-        # Create a test session in the database
+
         try:
             conn = sqlite3.connect(self.db_file)
             c = conn.cursor()
-            c.execute('''INSERT INTO test_sessions (
-                timestamp, reference_location, reference_lat, reference_lon, protocol
-            ) VALUES (?, ?, ?, ?, ?)''', (
-                timestamp, self.reference_location, 
+            c.execute("INSERT INTO test_sessions (timestamp, reference_location, reference_lat, reference_lon, protocol) VALUES (?, ?, ?, ?, ?)", (
+                timestamp, self.reference_location,
                 self.reference_coords[0], self.reference_coords[1], protocol
             ))
             session_id = c.lastrowid
@@ -1014,167 +1008,201 @@ class MullvadTester:
             logger.error(f"Error creating test session in database: {e}")
             session_id = None
 
-        # Open results file
-        with open(results_file, 'w') as f:
-            # Write header information
-            f.write("Mullvad VPN Server Performance Test Results\n")
-            f.write(f"Test Date: {timestamp}\n")
-            f.write(f"Reference Location: {self.reference_location}\n")
-            f.write(f"Target Host for MTR: {self.target_host}\n")
-            f.write(f"Protocol: {protocol}\n")
-            f.write(f"Connection Timeout: {self.connection_timeout:.1f}s")
-            if avg_time: f.write(f" (calibrated from average {avg_time:.2f}s)")
-            f.write("\n")
-            f.write(f"Minimum Viable Servers Required: {self.min_viable_servers}\n")
-            f.write(f"Initial Servers to Test: {max_servers}\n")
-            if max_distance: f.write(f"Maximum Distance: {max_distance} km\n")
-            f.write("=" * 80 + "\n\n")
-            
-            # Filter servers by distance if applicable
-            if max_distance is not None:
-                all_servers_filtered = [s for s in protocol_servers if s.distance_km <= max_distance]
-            else: all_servers_filtered = protocol_servers
-            
-            # Select initial diverse servers (up to max_servers)
-            initial_servers = self._select_servers(
-                all_servers_filtered, 
-                max_per_country=5, 
-                max_total_servers=max_servers
-            )
-            
-            # Create a list of remaining servers (not in the initial selection)
-            remaining_servers = [s for s in all_servers_filtered if s not in initial_servers]
-                
-            logger.info(f"Starting initial tests on {len(initial_servers)} servers" + 
-                       (f" within {max_distance} km" if max_distance else ""))
-            
-            self.ui.header("STARTING TESTS")
+        f = open(results_file, 'w')
+        f.write("Mullvad VPN Server Performance Test Results\n")
+        f.write(f"Test Date: {timestamp}\n")
+        f.write(f"Reference Location: {self.reference_location}\n")
+        f.write(f"Target Host for MTR: {self.target_host}\n")
+        f.write(f"Protocol: {protocol}\n")
+        f.write(f"Connection Timeout: {self.connection_timeout:.1f}s")
+        if avg_time:
+            f.write(f" (calibrated from average {avg_time:.2f}s)")
+        f.write("\n")
+        f.write(f"Minimum Viable Servers Required: {self.min_viable_servers}\n")
+        f.write(f"Initial Servers to Test: {max_servers}\n")
+        if max_distance:
+            f.write(f"Maximum Distance: {max_distance} km\n")
+        f.write("=" * 80 + "\n\n")
+
+        if max_distance is not None:
+            all_servers_filtered = [s for s in protocol_servers if s.distance_km <= max_distance]
+        else:
+            all_servers_filtered = protocol_servers
+
+        initial_servers = self._select_servers(
+            all_servers_filtered,
+            max_per_country=5,
+            max_total_servers=max_servers
+        )
+        remaining_servers = [s for s in all_servers_filtered if s not in initial_servers]
+
+        logger.info(
+            f"Starting initial tests on {len(initial_servers)} servers" +
+            (f" within {max_distance} km" if max_distance else "")
+        )
+        self.ui.header("STARTING TESTS")
+        self.ui.info(
+            f"Starting tests on {len(initial_servers)} servers " +
+            (f"(max distance: {max_distance} km)" if max_distance else "")
+        )
+
+        return session_id, results_file, f, initial_servers, remaining_servers
+
+    def _test_server_list(self, servers, file_handle, session_id, tested_servers, initial_total, viable_servers):
+        """Test a list of servers and return updated viable count"""
+        for server in servers:
+            tested_servers.append(server)
+            idx = len(tested_servers)
+
+            logger.info(f"\nTesting server {idx}/{initial_total}: {server.hostname}")
+
+            self.ui.header(f"TEST {idx}/{initial_total if idx <= initial_total else '+'}")
+            self.ui.info(f"Server: {server.hostname}")
+            self.ui.info(f"Location: {server.city}, {server.country}")
+            self.ui.info(f"Distance: {server.distance_km:.0f} km")
+
+            speedtest_result, mtr_result, viable = self.test_server(server)
+            self.results[server.hostname] = (speedtest_result, mtr_result, viable)
+
+            if viable:
+                viable_servers += 1
+
+            if session_id:
+                self._save_results_to_db(session_id, server, speedtest_result, mtr_result, viable)
+            self._write_server_results_to_file(file_handle, server, speedtest_result, mtr_result, viable)
+
             self.ui.info(
-                f"Starting tests on {len(initial_servers)} servers " +
-                (f"(max distance: {max_distance} km)" if max_distance else "")
+                f"Progress: {idx} servers tested ({self.successful_servers} successful, {viable_servers} viable)"
             )
-            
-            tested_servers = []
-            total_servers_to_test = initial_servers.copy()
-            
-            # Test servers one by one
-            while total_servers_to_test:
-                server = total_servers_to_test.pop(0)
-                tested_servers.append(server)
-                idx = len(tested_servers)
-                
-                logger.info(f"\nTesting server {idx}/{len(initial_servers)}: {server.hostname}")
-                
-                self.ui.header(f"TEST {idx}/{len(initial_servers) if idx <= len(initial_servers) else '+'}")
-                self.ui.info(f"Server: {server.hostname}")
-                self.ui.info(f"Location: {server.city}, {server.country}")
-                self.ui.info(f"Distance: {server.distance_km:.0f} km")
 
-                # Test the server
-                speedtest_result, mtr_result, viable = self.test_server(server)
-                self.results[server.hostname] = (speedtest_result, mtr_result, viable)
-                
-                if viable: viable_servers += 1
-
-                # Save results to database and file
-                if session_id: self._save_results_to_db(session_id, server, speedtest_result, mtr_result, viable)
-                self._write_server_results_to_file(f, server, speedtest_result, mtr_result, viable)
-                
-                self.ui.info(f"Progress: {idx} servers tested ({self.successful_servers} successful, {viable_servers} viable)")
-                
-                # Check if we've found enough viable servers
-                if viable_servers >= self.min_viable_servers and idx >= max_servers:
-                    logger.info(f"Found {viable_servers} viable servers after testing {idx} servers. Stopping tests.")
-                    self.ui.success(f"Goal achieved: {viable_servers}/{self.min_viable_servers} viable servers found.")
-                    break
-                    
-                if idx < max_servers: continue
-                
-                # If we need more viable servers, continue testing
-                if viable_servers < self.min_viable_servers:
-                    if idx == max_servers:  # First time we hit this condition
-                        logger.info(f"Extending testing beyond initial {max_servers} servers to find {self.min_viable_servers} viable servers")
-                        
-                        self.ui.warning(f"Only {viable_servers}/{self.min_viable_servers} viable servers found")
-                        self.ui.info(f"Searching for servers on continents other than {self.user_continent}")
-                        
-                        f.write(f"\nNote: Extending testing beyond initial {max_servers} servers to find at least {self.min_viable_servers} viable servers.\n")
-                        f.write(f"Excluding servers from {self.user_continent} and selecting from other continents.\n\n")
-                        
-                        # Calculate how many additional servers we need (at maximum)
-                        remaining_to_test = min(self.max_servers_hard_limit - len(tested_servers), 
-                                              (self.min_viable_servers - viable_servers) * 3)  # Estimate: need 3x tests for each viable server
-                        
-                        if remaining_to_test > 0:
-                            # Use optimized selection for additional servers
-                            additional_servers = self._select_servers(
-                                [s for s in remaining_servers if s not in tested_servers],
-                                max_per_country=3,
-                                max_total_servers=remaining_to_test,
-                                exclude_continent=self.user_continent,
-                                tested_servers=tested_servers
-                            )
-                            
-                            if additional_servers:
-                                countries_count = len(set([s.hostname.split('-')[0] for s in additional_servers]))
-                                self.ui.info(f"Found {len(additional_servers)} servers from {countries_count} countries")
-                                
-                                remaining_servers = additional_servers
-                            else:
-                                logger.warning("No more servers available for additional testing")
-                                self.ui.warning("No more servers available for additional testing")
-                    
-                    # Check if we've hit the hard limit
-                    if len(tested_servers) >= self.max_servers_hard_limit:
-                        logger.warning(f"Reached hard limit of {self.max_servers_hard_limit} servers tested without finding {self.min_viable_servers} viable servers")
-                        self.ui.warning(f"Maximum limit reached: {self.max_servers_hard_limit} servers tested")
-                        self.ui.warning(f"Unable to find {self.min_viable_servers} viable servers")
-                        break
-                    
-                    # Get next server to test
-                    if remaining_servers:
-                        next_server = remaining_servers.pop(0)
-                        total_servers_to_test.append(next_server)
-                    else:
-                        logger.warning("No more servers available to test")
-                        self.ui.warning("No more servers available to test")
-                        break
-                else: break
-
-            # Generate summary
-            if self.results:
-                self._print_summary(results_file, viable_servers)
-
-                self.ui.header("TESTS COMPLETED")
-                self.ui.success(
-                    f"Tests successfully completed: {self.successful_servers} functional servers out of {len(tested_servers)} tested"
+            if viable_servers >= self.min_viable_servers and idx >= initial_total:
+                logger.info(
+                    f"Found {viable_servers} viable servers after testing {idx} servers. Stopping tests."
                 )
-                if viable_servers >= self.min_viable_servers:
-                    self.ui.success(
-                        f"Goal achieved: {viable_servers}/{self.min_viable_servers} viable servers (speed > {self.min_download_speed} Mbps)"
-                    )
-                else:
-                    self.ui.warning(
-                        f"Goal not achieved: {viable_servers}/{self.min_viable_servers} viable servers (speed > {self.min_download_speed} Mbps)"
-                    )
-                self.ui.info(f"Detailed results saved in: {results_file}")
+                self.ui.success(
+                    f"Goal achieved: {viable_servers}/{self.min_viable_servers} viable servers found."
+                )
+                break
 
-                if self.interactive:
-                    print("\nWould you like to open the results file?")
-                    choice = input("Open file? (y/n): ").strip().lower()
-                    if choice.startswith('y'):
-                        try:
-                            if sys.platform == 'darwin':
-                                subprocess.call(('open', results_file))
-                            elif sys.platform == 'win32':
-                                os.startfile(results_file)
-                            else:
-                                subprocess.call(('xdg-open', results_file))
-                        except Exception as e:
-                            self.ui.error(f"Unable to open file: {e}")
+            if len(tested_servers) >= self.max_servers_hard_limit:
+                logger.warning(
+                    f"Reached hard limit of {self.max_servers_hard_limit} servers tested without finding {self.min_viable_servers} viable servers"
+                )
+                self.ui.warning(
+                    f"Maximum limit reached: {self.max_servers_hard_limit} servers tested"
+                )
+                self.ui.warning(
+                    f"Unable to find {self.min_viable_servers} viable servers"
+                )
+                break
+
+        return viable_servers
+
+    def _extend_selection_if_needed(self, viable_servers, tested_servers, remaining_servers, file_handle, initial_total):
+        """Select additional servers if more viable ones are needed"""
+        if len(tested_servers) == initial_total:
+            logger.info(
+                f"Extending testing beyond initial {initial_total} servers to find {self.min_viable_servers} viable servers"
+            )
+            self.ui.warning(
+                f"Only {viable_servers}/{self.min_viable_servers} viable servers found"
+            )
+            self.ui.info(
+                f"Searching for servers on continents other than {self.user_continent}"
+            )
+            file_handle.write(
+                f"\nNote: Extending testing beyond initial {initial_total} servers to find at least {self.min_viable_servers} viable servers.\n"
+            )
+            file_handle.write(
+                f"Excluding servers from {self.user_continent} and selecting from other continents.\n\n"
+            )
+
+        remaining_to_test = min(
+            self.max_servers_hard_limit - len(tested_servers),
+            (self.min_viable_servers - viable_servers) * 3,
+        )
+        if remaining_to_test <= 0:
+            return [], remaining_servers
+
+        available = [s for s in remaining_servers if s not in tested_servers]
+        additional_servers = self._select_servers(
+            available,
+            max_per_country=3,
+            max_total_servers=remaining_to_test,
+            exclude_continent=self.user_continent,
+            tested_servers=tested_servers,
+        )
+
+        if additional_servers:
+            countries_count = len({s.hostname.split('-')[0] for s in additional_servers})
+            self.ui.info(
+                f"Found {len(additional_servers)} servers from {countries_count} countries"
+            )
+            remaining_servers = [s for s in remaining_servers if s not in additional_servers]
+            return additional_servers, remaining_servers
+
+        logger.warning("No more servers available for additional testing")
+        self.ui.warning("No more servers available for additional testing")
+        return [], remaining_servers
+
+    def _write_summary(self, results_file, viable_servers, tested_count):
+        """Write summary of results and display final messages"""
+        if self.results:
+            self._print_summary(results_file, viable_servers)
+
+            self.ui.header("TESTS COMPLETED")
+            self.ui.success(
+                f"Tests successfully completed: {self.successful_servers} functional servers out of {tested_count} tested"
+            )
+            if viable_servers >= self.min_viable_servers:
+                self.ui.success(
+                    f"Goal achieved: {viable_servers}/{self.min_viable_servers} viable servers (speed > {self.min_download_speed} Mbps)"
+                )
             else:
-                logger.error("No test results available to generate summary")
-                self.ui.error("No test results available to generate a summary.")
+                self.ui.warning(
+                    f"Goal not achieved: {viable_servers}/{self.min_viable_servers} viable servers (speed > {self.min_download_speed} Mbps)"
+                )
+            self.ui.info(f"Detailed results saved in: {results_file}")
+
+            if self.interactive:
+                print("\nWould you like to open the results file?")
+                choice = input("Open file? (y/n): ").strip().lower()
+                if choice.startswith('y'):
+                    try:
+                        if sys.platform == 'darwin':
+                            subprocess.call(('open', results_file))
+                        elif sys.platform == 'win32':
+                            os.startfile(results_file)
+                        else:
+                            subprocess.call(('xdg-open', results_file))
+                    except Exception as e:
+                        self.ui.error(f"Unable to open file: {e}")
+        else:
+            logger.error("No test results available to generate summary")
+            self.ui.error("No test results available to generate a summary.")
+
+    def run_tests(self, protocol="WireGuard", max_servers=None, max_distance=None):
+        """Run tests on servers"""
+        session = self._prepare_session(protocol, max_servers, max_distance)
+        if not session:
+            return
+
+        session_id, results_file, file_handle, initial_servers, remaining_servers = session
+        tested_servers = []
+        viable_servers = self._test_server_list(initial_servers, file_handle, session_id, tested_servers, len(initial_servers), 0)
+
+        while viable_servers < self.min_viable_servers and len(tested_servers) < self.max_servers_hard_limit:
+            additional_servers, remaining_servers = self._extend_selection_if_needed(
+                viable_servers, tested_servers, remaining_servers, file_handle, len(initial_servers)
+            )
+            if not additional_servers:
+                break
+            viable_servers = self._test_server_list(
+                additional_servers, file_handle, session_id, tested_servers, len(initial_servers), viable_servers
+            )
+
+        file_handle.close()
+        self._write_summary(results_file, viable_servers, len(tested_servers))
 
     def _write_server_results_to_file(self, file, server, speedtest_result, mtr_result, viable):
         """Write server test results to the log file"""
