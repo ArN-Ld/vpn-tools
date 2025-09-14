@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Mullvad VPN Server Performance Tester - Optimized Version"""
-import subprocess, json, re, time, os, pickle, sqlite3, statistics, logging, sys, shutil, random
+import subprocess, json, re, time, os, pickle, sqlite3, statistics, logging, sys, shutil, random, threading
 from typing import List, Dict, Tuple, Optional, Set, Union, Any
 from dataclasses import dataclass
 from datetime import datetime
@@ -208,6 +208,58 @@ def run_command(cmd, timeout=None, check=False, capture_output=False):
     except Exception as e:
         logger.error(f"Error running command {' '.join(cmd)}: {e}")
         return None
+
+def run_with_spinner(message, action, timeout=None):
+    """Display a spinner while running an action.
+
+    Args:
+        message: Message displayed alongside the spinner.
+        action: Callable accepting a stop_event and returning a result.
+        timeout: Maximum duration in seconds before setting the stop_event.
+
+    Returns:
+        Tuple of (result, timed_out, elapsed_time).
+    """
+    spinner_chars = ['|', '/', '-', '\\']
+    spinner_idx = 0
+    stop_event = threading.Event()
+    result = {'value': None, 'error': None}
+
+    def runner():
+        try:
+            result['value'] = action(stop_event)
+        except Exception as e:
+            result['error'] = e
+        finally:
+            stop_event.set()
+
+    thread = threading.Thread(target=runner, daemon=True)
+    thread.start()
+    start_time = time.time()
+    timed_out = False
+
+    try:
+        while thread.is_alive():
+            elapsed = time.time() - start_time
+            if timeout is not None and elapsed >= timeout:
+                timed_out = True
+                stop_event.set()
+            if timeout is not None:
+                time_info = f"({max(0, timeout - elapsed):.0f}s remaining)"
+            else:
+                time_info = f"({elapsed:.1f}s)"
+            print(f"\r{message} {spinner_chars[spinner_idx]} {time_info} ", end='', flush=True)
+            spinner_idx = (spinner_idx + 1) % len(spinner_chars)
+            time.sleep(0.1)
+    finally:
+        thread.join()
+        print(f"\r{' ' * get_terminal_width()}\r", end='')
+        print()
+
+    elapsed_total = time.time() - start_time
+    if result['error'] and not timed_out:
+        raise result['error']
+    return result.get('value'), timed_out, elapsed_total
 
 def load_geo_modules():
     """Lazily load geopy modules only when needed"""
@@ -478,55 +530,51 @@ class MullvadTester:
                 
             output = subprocess.check_output(["mullvad", "relay", "list"], text=True)
             
-            if self.interactive:
-                spinner_chars = ['|', '/', '-', '\\']
-                print("Processing server data ", end='')
-                sys.stdout.flush()
-
             current_country, current_city = "", ""
-            spinner_idx = 0
             current_coords = (0.0, 0.0)
-            
+
             # Regular expressions (compiled for efficiency)
             country_pattern = re.compile(r'^([A-Za-z\s]+)\s+\(([a-z]{2})\)$')
             city_pattern = re.compile(r'^\s*([A-Za-z\s,]+)\s+\([a-z]+\)\s+@\s+[-\d.]+°[NS],\s+[-\d.]+°[EW]$')
             server_pattern = re.compile(r'^\s*([a-z]{2}-[a-z]+-(?:wg|ovpn)-\d+)\s+\(([^,]+)(?:,\s*([^)]+))?\)\s+-\s+([^,]+)(?:,\s+hosted by ([^()]+))?\s+\(([^)]+)\)$')
-            
+
             lines = output.strip().split('\n')
-            for i, line in enumerate(lines):
-                line = line.strip()
-                if not line: continue
 
-                if self.interactive and i % 10 == 0:
-                    print(f"\rProcessing server data {spinner_chars[spinner_idx]} ", end='')
-                    spinner_idx = (spinner_idx + 1) % len(spinner_chars)
-                    sys.stdout.flush()
+            def process_lines():
+                nonlocal current_country, current_city, current_coords
+                for line in lines:
+                    line = line.strip()
+                    if not line:
+                        continue
 
-                # Parse country, city, and server in a single pass with if/elif chain
-                if country_match := country_pattern.match(line):
-                    current_country = country_match.group(1)
-                elif city_match := city_pattern.match(line):
-                    current_city = city_match.group(1)
-                    try:
-                        from mullvad_coordinates import get_coordinates
-                        current_coords = get_coordinates(current_city, current_country)
-                    except ImportError:
-                        current_coords = (0.0, 0.0)
-                elif server_match := server_pattern.match(line):
-                    hostname, ip = server_match.group(1), server_match.group(2)
-                    ipv6 = server_match.group(3) or ""
-                    protocol, provider = server_match.group(4), server_match.group(5) or ""
-                    ownership = server_match.group(6)
-                    distance = self._calculate_distance(current_coords)
-                    servers.append(ServerInfo(
-                        country=current_country, city=current_city, hostname=hostname,
-                        protocol=protocol, provider=provider, ownership=ownership,
-                        ip=ip, ipv6=ipv6, latitude=current_coords[0],
-                        longitude=current_coords[1], distance_km=distance
-                    ))
-            
-            if self.interactive: print(f"\rProcessing server data {' ' * 20}")
-            
+                    # Parse country, city, and server in a single pass with if/elif chain
+                    if country_match := country_pattern.match(line):
+                        current_country = country_match.group(1)
+                    elif city_match := city_pattern.match(line):
+                        current_city = city_match.group(1)
+                        try:
+                            from mullvad_coordinates import get_coordinates
+                            current_coords = get_coordinates(current_city, current_country)
+                        except ImportError:
+                            current_coords = (0.0, 0.0)
+                    elif server_match := server_pattern.match(line):
+                        hostname, ip = server_match.group(1), server_match.group(2)
+                        ipv6 = server_match.group(3) or ""
+                        protocol, provider = server_match.group(4), server_match.group(5) or ""
+                        ownership = server_match.group(6)
+                        distance = self._calculate_distance(current_coords)
+                        servers.append(ServerInfo(
+                            country=current_country, city=current_city, hostname=hostname,
+                            protocol=protocol, provider=provider, ownership=ownership,
+                            ip=ip, ipv6=ipv6, latitude=current_coords[0],
+                            longitude=current_coords[1], distance_km=distance
+                        ))
+
+            if self.interactive:
+                run_with_spinner("Processing server data", lambda stop_event: process_lines())
+            else:
+                process_lines()
+
             # Sort servers by distance - more efficient than sorting during processing
             return sorted(servers, key=lambda x: x.distance_km)
             
@@ -770,65 +818,61 @@ class MullvadTester:
                 print_info("Running speed test...")
                 
             cmd = ["speedtest-cli", "--json", "--secure", "--timeout", "20"]
-            
+
             if self.interactive:
-                spinner_chars = ['|', '/', '-', '\\']
-                spinner_idx = 0
-                start_time = time.time()
-                
-                process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                
-                while process.poll() is None:
-                    elapsed = time.time() - start_time
-                    if elapsed > MAX_SPEEDTEST_TIME:
+                def action(stop_event):
+                    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    while process.poll() is None and not stop_event.is_set():
+                        time.sleep(0.1)
+                    if process.poll() is None:
                         process.terminate()
-                        print("")  # Newline after spinner
-                        print_info(f"Speed test canceled after {MAX_SPEEDTEST_TIME}s (maximum time reached)")
-                        return SpeedTestResult(0, 0, 0, 0, 100)
-                        
-                    print(f"\r{get_symbol('speedometer')} Speed test in progress {spinner_chars[spinner_idx]} ({elapsed:.1f}s) ", end='')
-                    spinner_idx = (spinner_idx + 1) % len(spinner_chars)
-                    sys.stdout.flush()
-                    time.sleep(0.1)
-                
-                stdout, stderr = process.communicate()
-                
-                end_time = time.time()
-                elapsed_time = end_time - start_time
-                
+                    stdout, stderr = process.communicate()
+                    return stdout, stderr, process.returncode
+
+                result, timed_out, elapsed_time = run_with_spinner(
+                    f"{get_symbol('speedometer')} Speed test in progress",
+                    action,
+                    timeout=MAX_SPEEDTEST_TIME,
+                )
+
+                if timed_out:
+                    print_info(f"Speed test canceled after {MAX_SPEEDTEST_TIME}s (maximum time reached)")
+                    return SpeedTestResult(0, 0, 0, 0, 100)
+
+                stdout, stderr, returncode = result
+
                 if elapsed_time < MIN_SPEEDTEST_TIME:
                     print(f"\r{get_symbol('speedometer')} Speed test completed too quickly ({elapsed_time:.1f}s), may be unreliable ", end='')
                     logger.warning(f"Speed test completed too quickly: {elapsed_time:.2f}s < {MIN_SPEEDTEST_TIME}s minimum")
-                    time.sleep(1)  # Give user time to see the message
-                
-                if process.returncode != 0:
-                    print("")  # Newline after spinner
-                    
+                    time.sleep(1)
+
+                if returncode != 0:
                     if stderr and "403: Forbidden" in stderr:
                         print_info("Speedtest service unavailable from this VPN server (IP likely blocked)")
                         logger.warning("Speedtest service blocked this VPN server's IP address (403 Forbidden)")
                     else:
                         print_info(f"Speed test failed: {stderr if stderr else 'Unknown error'}")
                         logger.error(f"Speedtest failed: {stderr}")
-                        
                     return SpeedTestResult(0, 0, 0, 0, 100)
-                
+
                 print(f"\r{' ' * get_terminal_width()}", end='\r')
-                
-                try: data = json.loads(stdout)
+
+                try:
+                    data = json.loads(stdout)
                 except json.JSONDecodeError as e:
-                    print_info(f"Speed test results not usable (JSON parsing error)")
+                    print_info("Speed test results not usable (JSON parsing error)")
                     logger.error(f"JSON parse error on output: {e}")
                     return SpeedTestResult(0, 0, 0, 0, 100)
             else:
                 result = run_command(cmd, timeout=MAX_SPEEDTEST_TIME)
-                
+
                 if result is None or isinstance(result, Exception) or result.returncode != 0:
                     logger.error("Speedtest failed")
                     return SpeedTestResult(0, 0, 0, 0, 100)
-                
+
                 stdout = result.stdout
-                try: data = json.loads(stdout)
+                try:
+                    data = json.loads(stdout)
                 except json.JSONDecodeError as e:
                     logger.error(f"Failed to decode JSON from speedtest result: {e}")
                     return SpeedTestResult(0, 0, 0, 0, 100)
@@ -872,30 +916,29 @@ class MullvadTester:
             count, timeout = 10, 60
             
             if self.interactive:
-                spinner_chars = ['|', '/', '-', '\\']
-                spinner_idx = 0
-                start_time = time.time()
-                
-                process = subprocess.Popen(
-                    ["sudo", "mtr", "-n", "-c", str(count), "-r", self.target_host],
-                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                def action(stop_event):
+                    process = subprocess.Popen(
+                        ["sudo", "mtr", "-n", "-c", str(count), "-r", self.target_host],
+                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                    )
+                    while process.poll() is None and not stop_event.is_set():
+                        time.sleep(0.1)
+                    if process.poll() is None:
+                        process.terminate()
+                    stdout, stderr = process.communicate()
+                    return stdout, stderr, process.returncode
+
+                result, timed_out, _ = run_with_spinner(
+                    f"{get_symbol('ping')} MTR test in progress",
+                    action,
+                    timeout=timeout,
                 )
-                
-                while process.poll() is None:
-                    elapsed = time.time() - start_time
-                    print(f"\r{get_symbol('ping')} MTR test in progress {spinner_chars[spinner_idx]} ({elapsed:.1f}s) ", end='')
-                    spinner_idx = (spinner_idx + 1) % len(spinner_chars)
-                    sys.stdout.flush()
-                    time.sleep(0.1)
-                
-                stdout, stderr = process.communicate()
-                
-                if process.returncode != 0:
-                    print("")  # Newline after spinner
-                    print_info(f"MTR test failed")
+
+                if timed_out or result[2] != 0:
+                    print_info("MTR test failed")
                     return MtrResult(0, 100, 0)
-                
-                print(f"\r{' ' * get_terminal_width()}", end='\r')
+
+                stdout, stderr, _ = result
                 output = stdout
             else:
                 result = run_command(["sudo", "mtr", "-n", "-c", str(count), "-r", self.target_host], timeout=timeout)
@@ -1050,19 +1093,16 @@ class MullvadTester:
         if self.interactive: print_info(f"Allowing connection to stabilize before testing...")
         
         stabilization_time = 8  # seconds to allow for connection optimization
-        
+
         if self.interactive:
-            spinner_chars = ['|', '/', '-', '\\']
-            for i in range(stabilization_time * 10):  # Update spinner 10 times per second
-                spinner_idx = i % len(spinner_chars)
-                seconds_left = stabilization_time - (i // 10)
-                print(f"\r{get_symbol('connecting')} Stabilizing connection {spinner_chars[spinner_idx]} ({seconds_left}s remaining) ", end='')
-                sys.stdout.flush()
-                time.sleep(0.1)
-            
-            print(f"\r{' ' * get_terminal_width()}", end='\r')
-            print_success(f"Connection stabilized and ready for testing")
-        else: time.sleep(stabilization_time)
+            run_with_spinner(
+                f"{get_symbol('connecting')} Stabilizing connection",
+                lambda stop_event: stop_event.wait(stabilization_time),
+                timeout=stabilization_time,
+            )
+            print_success("Connection stabilized and ready for testing")
+        else:
+            time.sleep(stabilization_time)
 
         # Run speed test
         speedtest_result = self._run_speedtest()
