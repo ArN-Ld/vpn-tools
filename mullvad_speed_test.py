@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Mullvad VPN Server Performance Tester - Optimized Version"""
-import subprocess, json, re, time, os, pickle, sqlite3, statistics, logging, sys, random
+import subprocess, json, re, time, os, pickle, sqlite3, statistics, logging, sys, random, functools
 from typing import List, Dict, Tuple, Optional, Set
 from dataclasses import dataclass
 from datetime import datetime
@@ -17,6 +17,11 @@ from ui.display_manager import (
     format_mtr_results,
     format_speedtest_results,
 )
+
+try:
+    from mullvad_coordinates import get_coordinates
+except ImportError:
+    get_coordinates = None
 
 # Constants
 DEFAULT_MAX_SERVERS, MAX_SERVERS_HARD_LIMIT = 15, 45
@@ -102,6 +107,7 @@ def run_command(cmd, timeout=None, check=False, capture_output=False):
         logger.error(f"Error running command {' '.join(cmd)}: {e}")
         return None
 
+@functools.lru_cache(maxsize=1)
 def load_geo_modules(ui):
     """Lazily load geopy modules only when needed"""
     try:
@@ -379,10 +385,9 @@ class MullvadTester:
                         current_country = country_match.group(1)
                     elif city_match := city_pattern.match(line):
                         current_city = city_match.group(1)
-                        try:
-                            from mullvad_coordinates import get_coordinates
+                        if get_coordinates:
                             current_coords = get_coordinates(current_city, current_country)
-                        except ImportError:
+                        else:
                             current_coords = (0.0, 0.0)
                     elif server_match := server_pattern.match(line):
                         hostname, ip = server_match.group(1), server_match.group(2)
