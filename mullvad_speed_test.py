@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Mullvad VPN Server Performance Tester - Optimized Version"""
 import subprocess, json, re, time, os, pickle, sqlite3, statistics, logging, sys, random, functools
+from contextlib import contextmanager
 from typing import List, Dict, Tuple, Optional, Set
 from dataclasses import dataclass
 from datetime import datetime
@@ -284,6 +285,18 @@ class MullvadTester:
                 logger.info(f"Saved {len(self.coords_cache)} location coordinates to cache")
         except Exception as e:
             logger.warning(f"Could not save coordinates cache: {e}")
+
+    @contextmanager
+    def _with_db_cursor(self):
+        """Yield a database cursor with automatic commit handling."""
+        try:
+            with sqlite3.connect(self.db_file) as conn:
+                cursor = conn.cursor()
+                yield cursor
+                conn.commit()
+        except sqlite3.Error as e:
+            logger.error(f"Database connection error: {e}")
+            raise
 
     def _init_database(self):
         """Initialize SQLite database for storing test results"""
@@ -873,9 +886,7 @@ class MullvadTester:
         if session_id is None: return False
 
         try:
-            with sqlite3.connect(self.db_file) as conn:
-                c = conn.cursor()
-
+            with self._with_db_cursor() as c:
                 c.execute('''INSERT INTO server_results (
                     session_id, hostname, country, city, distance_km, connection_time,
                     download_speed, upload_speed, ping, jitter, speedtest_packet_loss,
@@ -886,11 +897,9 @@ class MullvadTester:
                     speedtest.ping, speedtest.jitter, speedtest.packet_loss,
                     mtr.avg_latency, mtr.packet_loss, mtr.hops, 1 if viable else 0
                 ))
-
-                conn.commit()
             logger.debug(f"Saved results for server {server.hostname} to database")
             return True
-        
+
         except Exception as e:
             logger.error(f"Error saving results to database: {e}")
             return False
@@ -927,14 +936,12 @@ class MullvadTester:
         self.ui.info("")
 
         try:
-            with sqlite3.connect(self.db_file) as conn:
-                c = conn.cursor()
+            with self._with_db_cursor() as c:
                 c.execute("INSERT INTO test_sessions (timestamp, reference_location, reference_lat, reference_lon, protocol) VALUES (?, ?, ?, ?, ?)", (
                     timestamp, self.reference_location,
                     self.reference_coords[0], self.reference_coords[1], protocol
                 ))
                 session_id = c.lastrowid
-                conn.commit()
             logger.info(f"Created new test session with ID {session_id}")
         except Exception as e:
             logger.error(f"Error creating test session in database: {e}")
