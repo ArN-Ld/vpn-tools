@@ -958,15 +958,12 @@ class MullvadTester:
         )
         remaining_servers = [s for s in all_servers_filtered if s not in initial_servers]
 
-        logger.info(
-            f"Starting initial tests on {len(initial_servers)} servers" +
+        self.ui.header("STARTING TESTS")
+        message = (
+            f"Starting tests on {len(initial_servers)} servers" +
             (f" within {max_distance} km" if max_distance else "")
         )
-        self.ui.header("STARTING TESTS")
-        self.ui.info(
-            f"Starting tests on {len(initial_servers)} servers " +
-            (f"(max distance: {max_distance} km)" if max_distance else "")
-        )
+        self.log_and_info(message)
 
         return session_id, results_file, f, initial_servers, remaining_servers
 
