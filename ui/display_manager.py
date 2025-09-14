@@ -139,7 +139,8 @@ def print_connection_status(hostname: str, status: str, time_taken: Optional[flo
 
 
 def format_server_info(server: ServerInfo) -> str:
-    hostname_part = colorize(f"{get_symbol('server').rstrip()} {server.hostname}", Fore.CYAN)
+    server_symbol = f"{get_symbol('server')}\u00A0"
+    hostname_part = colorize(f"{server_symbol}{server.hostname}", Fore.CYAN)
     location_part = colorize(f"({server.city}, {server.country})", Fore.WHITE)
     distance_part = colorize(f"{server.distance_km:.0f} km", Fore.YELLOW)
     return f"{hostname_part} {location_part} {distance_part}"
