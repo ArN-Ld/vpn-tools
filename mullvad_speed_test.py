@@ -284,77 +284,68 @@ class MullvadTester:
     def _get_location_coordinates(self):
         """Get coordinates for reference location"""
         location = self.reference_location
-        
+
         # Check cache first
         if location in self.coords_cache:
             coords = self.coords_cache[location]
             logger.info(f"Using cached coordinates for {location}: {coords}")
             self.ui.info(f"Using cached coordinates for {location}: {coords}")
             return coords
-        
+
         # Load geopy modules
-        geodesic, Nominatim, GeocoderTimedOut = load_geo_modules(self.ui)
-        
+        _, Nominatim, _ = load_geo_modules(self.ui)
+
+        geolocator = Nominatim(user_agent="mullvad_speed_test")
+        self.ui.info(f"Searching for coordinates for {location}...")
+
         try:
-            geolocator = Nominatim(user_agent="mullvad_speed_test")
-            
-            if self.interactive:
-                self.ui.info(f"Searching for coordinates for {location}...")
-                location_data = geolocator.geocode(location, exactly_one=True)
-
-                if location_data:
-                    coords = (location_data.latitude, location_data.longitude)
-                    self.ui.success(f"Location found: {location_data.address}")
-                    self.ui.success(f"Coordinates: {coords}")
-
-                    self.coords_cache[location] = coords
-                    self._save_coords_cache()
-                    return coords
-                else:
-                    self.ui.error(f"Unable to find coordinates for: {location}")
-                    self.ui.header("LOCATION OPTIONS")
-                    print("1. Try another location")
-                    print("2. Enter coordinates manually")
-
-                    choice = input("\nYour choice (1/2): ").strip()
-                    if choice == "1":
-                        new_location = input_location(self.ui)
-                        self.reference_location = new_location
-                        return self._get_location_coordinates()
-                    else:
-                        coords = input_coordinates(self.ui)
-                        self.coords_cache[location] = coords
-                        self._save_coords_cache()
-                        return coords
-            else:
-                location_data = geolocator.geocode(location, exactly_one=True)
-                
-                if location_data:
-                    coords = (location_data.latitude, location_data.longitude)
-                    logger.info(f"Found coordinates for {location}: {coords}")
-                    
-                    self.coords_cache[location] = coords
-                    self._save_coords_cache()
-                    return coords
-                else:
-                    logger.warning(f"Could not find coordinates for {location}")
-                    if self.default_coords: return self.default_coords
-                    elif location.lower().startswith("beijing"): return BEIJING_COORDS
-                    else: return (0.0, 0.0)
-                    
+            location_data = geolocator.geocode(location, exactly_one=True)
         except Exception as e:
             logger.warning(f"Error getting coordinates for {location}: {e}")
-            
-            if self.interactive:
-                self.ui.error(f"Error searching for coordinates: {e}")
-                coords = input_coordinates(self.ui)
-                self.coords_cache[location] = coords
-                self._save_coords_cache()
-                return coords
-            else:
-                if self.default_coords: return self.default_coords
-                elif location.lower().startswith("beijing"): return BEIJING_COORDS
-                else: return (0.0, 0.0)
+            self.ui.error(f"Error searching for coordinates: {e}")
+            return self._handle_geocode_failure(location)
+
+        if location_data:
+            coords = (location_data.latitude, location_data.longitude)
+            self.ui.success(f"Location found: {location_data.address}")
+            self.ui.success(f"Coordinates: {coords}")
+            logger.info(f"Found coordinates for {location}: {coords}")
+            self.coords_cache[location] = coords
+            self._save_coords_cache()
+            return coords
+
+        self.ui.error(f"Unable to find coordinates for: {location}")
+        return self._handle_geocode_failure(location)
+
+    def _handle_geocode_failure(self, location):
+        """Fallback handling when geocoding fails"""
+        if self.interactive:
+            return self._manual_coordinates_flow(location)
+        return self._default_coordinates(location)
+
+    def _manual_coordinates_flow(self, location):
+        """Interactive flow for manual location or coordinate input"""
+        self.ui.header("LOCATION OPTIONS")
+        print("1. Try another location")
+        print("2. Enter coordinates manually")
+
+        choice = input("\nYour choice (1/2): ").strip()
+        if choice == "1":
+            new_location = input_location(self.ui)
+            self.reference_location = new_location
+            return self._get_location_coordinates()
+        coords = input_coordinates(self.ui)
+        self.coords_cache[location] = coords
+        self._save_coords_cache()
+        return coords
+
+    def _default_coordinates(self, location):
+        """Return default coordinates for non-interactive fallback"""
+        if self.default_coords:
+            return self.default_coords
+        if location.lower().startswith("beijing"):
+            return BEIJING_COORDS
+        return (0.0, 0.0)
 
     def _calculate_distance(self, server_coords):
         """Calculate distance between server and reference location"""
