@@ -2,6 +2,7 @@ import sys
 import shutil
 import threading
 import time
+from typing import Optional
 
 # Try to import colorama for color support
 try:
@@ -48,7 +49,7 @@ def get_terminal_width() -> int:
     return shutil.get_terminal_size().columns if hasattr(shutil, 'get_terminal_size') else 80
 
 
-def print_status(message: str, status: str | None = None) -> None:
+def print_status(message: str, status: Optional[str] = None) -> None:
     """Unified function for printing status messages with colors and symbols."""
     if status == "success":
         prefix, color = get_symbol('success'), Fore.GREEN
@@ -64,7 +65,7 @@ def print_status(message: str, status: str | None = None) -> None:
     print(f"{color}{prefix} {message}{Style.RESET_ALL}" if COLOR_SUPPORT else f"{prefix} {message}")
 
 
-def print_header(title: str, width: int | None = None) -> None:
+def print_header(title: str, width: Optional[int] = None) -> None:
     width = width or get_terminal_width()
     if COLOR_SUPPORT:
         print(f"\n{Fore.CYAN}{Style.BRIGHT}{title}\n{'-' * min(len(title), width)}{Style.RESET_ALL}")
@@ -88,7 +89,7 @@ def print_info(message: str) -> None:
     print_status(message, "info")
 
 
-def print_connection_status(hostname: str, status: str, time_taken: float | None = None) -> None:
+def print_connection_status(hostname: str, status: str, time_taken: Optional[float] = None) -> None:
     """Print connection status with color coding."""
     if status == "connecting":
         msg = f"{get_symbol('connecting')} Connecting to {hostname}..."
@@ -217,11 +218,11 @@ class DisplayManager:
         if self.interactive:
             print_info(message)
 
-    def header(self, title: str, width: int | None = None) -> None:
+    def header(self, title: str, width: Optional[int] = None) -> None:
         if self.interactive:
             print_header(title, width)
 
-    def connection_status(self, hostname: str, status: str, time_taken: float | None = None) -> None:
+    def connection_status(self, hostname: str, status: str, time_taken: Optional[float] = None) -> None:
         if self.interactive:
             print_connection_status(hostname, status, time_taken)
 
