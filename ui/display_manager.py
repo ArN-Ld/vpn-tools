@@ -51,24 +51,29 @@ def get_symbol(name: str) -> str:
     return SYMBOLS.get(name, '') if USE_UNICODE else ASCII_SYMBOLS.get(name, '')
 
 
+STATUS_STYLES = {
+    "success": (get_symbol("success"), Fore.GREEN),
+    "error": (get_symbol("error"), Fore.RED),
+    "warning": (get_symbol("warning"), Fore.YELLOW),
+    "info": (get_symbol("info"), Fore.BLUE),
+}
+
+
 def get_terminal_width() -> int:
     return shutil.get_terminal_size().columns if hasattr(shutil, 'get_terminal_size') else 80
 
 
 def print_status(message: str, status: Optional[str] = None) -> None:
     """Unified function for printing status messages with colors and symbols."""
-    if status == "success":
-        prefix, color = get_symbol('success'), Fore.GREEN
-    elif status == "error":
-        prefix, color = get_symbol('error'), Fore.RED
-    elif status == "warning":
-        prefix, color = get_symbol('warning'), Fore.YELLOW
-    elif status == "info":
-        prefix, color = get_symbol('info'), Fore.BLUE
+    prefix, color = STATUS_STYLES.get(status, (None, None))
+    if prefix:
+        print(
+            f"{color}{prefix} {message}{Style.RESET_ALL}"
+            if COLOR_SUPPORT
+            else f"{prefix} {message}"
+        )
     else:
         print(message)
-        return
-    print(f"{color}{prefix} {message}{Style.RESET_ALL}" if COLOR_SUPPORT else f"{prefix} {message}")
 
 
 def print_header(title: str, width: Optional[int] = None) -> None:
