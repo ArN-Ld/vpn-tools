@@ -853,7 +853,7 @@ class MullvadTester:
                 )
                 
                 if result is None or isinstance(result, Exception):
-                    if self.interactive: self.ui.connection_status(server.hostname, "error")
+                    self.ui.connection_status(server.hostname, "error")
                     return False
                 
                 self.ui.info(f"Initiating connection...")
@@ -865,22 +865,22 @@ class MullvadTester:
                 )
                 
                 if result is None or isinstance(result, Exception):
-                    if self.interactive: self.ui.connection_status(server.hostname, "error")
+                    self.ui.connection_status(server.hostname, "error")
                     return False
                 
             except Exception:
-                if self.interactive: self.ui.connection_status(server.hostname, "error")
+                self.ui.connection_status(server.hostname, "error")
                 return False
                 
             elapsed_setup_time = time.time() - connection_start_time
             remaining_time = max(1, total_timeout - elapsed_setup_time)
             
+            self.ui.info(f"Waiting for connection confirmation (total timeout: {total_timeout:.1f}s)...")
+
             if self.interactive:
-                self.ui.info(f"Waiting for connection confirmation (total timeout: {total_timeout:.1f}s)...")
-                
                 poll_interval = 0.1  # Check every 0.1 seconds for smoother progress bar
                 max_steps = int(remaining_time / poll_interval)
-                
+
                 for i in range(max_steps):
                     current_time = time.time()
                     total_elapsed = current_time - connection_start_time
@@ -928,9 +928,8 @@ class MullvadTester:
             
         except Exception as e:
             logger.error(f"Unexpected error while connecting to server: {e}")
-            if self.interactive:
-                self.ui.connection_status(server.hostname, "error")
-                self.ui.error(f"Connection error: {str(e).split(':')[0]}")
+            self.ui.connection_status(server.hostname, "error")
+            self.ui.error(f"Connection error: {str(e).split(':')[0]}")
             return False
 
     def test_server(self, server):
@@ -941,47 +940,39 @@ class MullvadTester:
             logger.warning(f"Skipping tests for {server.hostname} due to connection failure")
             return SpeedTestResult(0, 0, 0, 0, 100), MtrResult(0, 100, 0), False
 
-        if self.interactive:
-            self.ui.info(f"Allowing connection to stabilize before testing...")
-        
+        self.ui.info(f"Allowing connection to stabilize before testing...")
+
         stabilization_time = 8  # seconds to allow for connection optimization
 
-        if self.interactive:
-            self.ui.spinner(
-                f"{get_symbol('connecting')} Stabilizing connection",
-                lambda stop_event: stop_event.wait(stabilization_time),
-                timeout=stabilization_time,
-            )
-            self.ui.success("Connection stabilized and ready for testing")
-        else:
-            time.sleep(stabilization_time)
+        self.ui.spinner(
+            f"{get_symbol('connecting')} Stabilizing connection",
+            lambda stop_event: stop_event.wait(stabilization_time),
+            timeout=stabilization_time,
+        )
+        self.ui.success("Connection stabilized and ready for testing")
 
         # Run speed test
         speedtest_result = self._run_speedtest()
         
         if speedtest_result.download_speed < self.min_download_speed and speedtest_result.download_speed > 0:
-            if self.interactive:
-                self.ui.info(f"Insufficient speed: {speedtest_result.download_speed:.2f} Mbps < {self.min_download_speed} Mbps")
-                self.ui.info(f"Server {server.hostname} is classified as non-viable")
+            self.ui.info(f"Insufficient speed: {speedtest_result.download_speed:.2f} Mbps < {self.min_download_speed} Mbps")
+            self.ui.info(f"Server {server.hostname} is classified as non-viable")
             viable = False
         
         # Run MTR test if speed test was successful
         if speedtest_result.download_speed == 0:
-            if self.interactive:
-                self.ui.info(f"Speed test unsuccessful, MTR test skipped")
+            self.ui.info(f"Speed test unsuccessful, MTR test skipped")
             mtr_result = MtrResult(0, 100, 0)
         else: mtr_result = self._run_mtr()
         
         if speedtest_result.download_speed > 0 and mtr_result.avg_latency > 0:
             self.successful_servers += 1
-            if self.interactive:
-                if viable:
-                    self.ui.success(f"Test successful for {server.hostname} ✓")
-                else:
-                    self.ui.info(f"Test successful but insufficient speed for {server.hostname}")
+            if viable:
+                self.ui.success(f"Test successful for {server.hostname} ✓")
+            else:
+                self.ui.info(f"Test successful but insufficient speed for {server.hostname}")
         else:
-            if self.interactive:
-                self.ui.info(f"Server {server.hostname} did not respond correctly")
+            self.ui.info(f"Server {server.hostname} did not respond correctly")
             viable = False
             
         return speedtest_result, mtr_result, viable
@@ -1034,21 +1025,20 @@ class MullvadTester:
         # Calibrate connection timeout
         avg_time = self.run_connection_calibration()
         
-        if self.interactive:
-            self.ui.header("MULLVAD VPN TEST PARAMETERS")
-            params = [
-                f"Date                : {timestamp}",
-                f"Location            : {self.reference_location}",
-                f"Protocol            : {protocol}",
-                f"Minimum servers     : {self.min_viable_servers} viable",
-                f"Initial servers     : {max_servers}",
-                f"Connection timeout  : {self.connection_timeout:.1f}s",
-                f"Maximum distance    : {max_distance if max_distance else 'No limit'} km",
-                f"Results file        : {results_file}"
-            ]
-            for param in params:
-                self.ui.info(param)
-            print("")  # Add a blank line for readability
+        self.ui.header("MULLVAD VPN TEST PARAMETERS")
+        params = [
+            f"Date                : {timestamp}",
+            f"Location            : {self.reference_location}",
+            f"Protocol            : {protocol}",
+            f"Minimum servers     : {self.min_viable_servers} viable",
+            f"Initial servers     : {max_servers}",
+            f"Connection timeout  : {self.connection_timeout:.1f}s",
+            f"Maximum distance    : {max_distance if max_distance else 'No limit'} km",
+            f"Results file        : {results_file}"
+        ]
+        for param in params:
+            self.ui.info(param)
+        self.ui.info("")
             
         # Create a test session in the database
         try:
@@ -1102,12 +1092,11 @@ class MullvadTester:
             logger.info(f"Starting initial tests on {len(initial_servers)} servers" + 
                        (f" within {max_distance} km" if max_distance else ""))
             
-            if self.interactive:
-                self.ui.header("STARTING TESTS")
-                self.ui.info(
-                    f"Starting tests on {len(initial_servers)} servers " +
-                    (f"(max distance: {max_distance} km)" if max_distance else "")
-                )
+            self.ui.header("STARTING TESTS")
+            self.ui.info(
+                f"Starting tests on {len(initial_servers)} servers " +
+                (f"(max distance: {max_distance} km)" if max_distance else "")
+            )
             
             tested_servers = []
             total_servers_to_test = initial_servers.copy()
@@ -1120,14 +1109,10 @@ class MullvadTester:
                 
                 logger.info(f"\nTesting server {idx}/{len(initial_servers)}: {server.hostname}")
                 
-                if self.interactive:
-                    self.ui.header(f"TEST {idx}/{len(initial_servers) if idx <= len(initial_servers) else '+'}")
-                    self.ui.info(f"Server: {server.hostname}")
-                    self.ui.info(f"Location: {server.city}, {server.country}")
-                    self.ui.info(f"Distance: {server.distance_km:.0f} km")
-                else:
-                    print(f"\nTest server {idx}/{len(initial_servers) if idx <= len(initial_servers) else '+'}: {server.hostname}")
-                    print(f"Location: {server.city}, {server.country} (Distance: {server.distance_km:.0f} km)")
+                self.ui.header(f"TEST {idx}/{len(initial_servers) if idx <= len(initial_servers) else '+'}")
+                self.ui.info(f"Server: {server.hostname}")
+                self.ui.info(f"Location: {server.city}, {server.country}")
+                self.ui.info(f"Distance: {server.distance_km:.0f} km")
 
                 # Test the server
                 speedtest_result, mtr_result, viable = self.test_server(server)
@@ -1139,14 +1124,12 @@ class MullvadTester:
                 if session_id: self._save_results_to_db(session_id, server, speedtest_result, mtr_result, viable)
                 self._write_server_results_to_file(f, server, speedtest_result, mtr_result, viable)
                 
-                if self.interactive:
-                    self.ui.info(f"Progress: {idx} servers tested ({self.successful_servers} successful, {viable_servers} viable)")
+                self.ui.info(f"Progress: {idx} servers tested ({self.successful_servers} successful, {viable_servers} viable)")
                 
                 # Check if we've found enough viable servers
                 if viable_servers >= self.min_viable_servers and idx >= max_servers:
                     logger.info(f"Found {viable_servers} viable servers after testing {idx} servers. Stopping tests.")
-                    if self.interactive:
-                        self.ui.success(f"Goal achieved: {viable_servers}/{self.min_viable_servers} viable servers found.")
+                    self.ui.success(f"Goal achieved: {viable_servers}/{self.min_viable_servers} viable servers found.")
                     break
                     
                 if idx < max_servers: continue
@@ -1156,9 +1139,8 @@ class MullvadTester:
                     if idx == max_servers:  # First time we hit this condition
                         logger.info(f"Extending testing beyond initial {max_servers} servers to find {self.min_viable_servers} viable servers")
                         
-                        if self.interactive:
-                            self.ui.warning(f"Only {viable_servers}/{self.min_viable_servers} viable servers found")
-                            self.ui.info(f"Searching for servers on continents other than {self.user_continent}")
+                        self.ui.warning(f"Only {viable_servers}/{self.min_viable_servers} viable servers found")
+                        self.ui.info(f"Searching for servers on continents other than {self.user_continent}")
                         
                         f.write(f"\nNote: Extending testing beyond initial {max_servers} servers to find at least {self.min_viable_servers} viable servers.\n")
                         f.write(f"Excluding servers from {self.user_continent} and selecting from other continents.\n\n")
@@ -1178,22 +1160,19 @@ class MullvadTester:
                             )
                             
                             if additional_servers:
-                                if self.interactive:
-                                    countries_count = len(set([s.hostname.split('-')[0] for s in additional_servers]))
-                                    self.ui.info(f"Found {len(additional_servers)} servers from {countries_count} countries")
+                                countries_count = len(set([s.hostname.split('-')[0] for s in additional_servers]))
+                                self.ui.info(f"Found {len(additional_servers)} servers from {countries_count} countries")
                                 
                                 remaining_servers = additional_servers
                             else:
                                 logger.warning("No more servers available for additional testing")
-                                if self.interactive:
-                                    self.ui.warning("No more servers available for additional testing")
+                                self.ui.warning("No more servers available for additional testing")
                     
                     # Check if we've hit the hard limit
                     if len(tested_servers) >= self.max_servers_hard_limit:
                         logger.warning(f"Reached hard limit of {self.max_servers_hard_limit} servers tested without finding {self.min_viable_servers} viable servers")
-                        if self.interactive:
-                            self.ui.warning(f"Maximum limit reached: {self.max_servers_hard_limit} servers tested")
-                            self.ui.warning(f"Unable to find {self.min_viable_servers} viable servers")
+                        self.ui.warning(f"Maximum limit reached: {self.max_servers_hard_limit} servers tested")
+                        self.ui.warning(f"Unable to find {self.min_viable_servers} viable servers")
                         break
                     
                     # Get next server to test
@@ -1202,30 +1181,29 @@ class MullvadTester:
                         total_servers_to_test.append(next_server)
                     else:
                         logger.warning("No more servers available to test")
-                        if self.interactive:
-                            self.ui.warning("No more servers available to test")
+                        self.ui.warning("No more servers available to test")
                         break
                 else: break
 
             # Generate summary
             if self.results:
                 self._print_summary(results_file, viable_servers)
-                
-                if self.interactive:
-                    self.ui.header("TESTS COMPLETED")
-                    self.ui.success(
-                        f"Tests successfully completed: {self.successful_servers} functional servers out of {len(tested_servers)} tested"
-                    )
-                    if viable_servers >= self.min_viable_servers:
-                        self.ui.success(
-                            f"Goal achieved: {viable_servers}/{self.min_viable_servers} viable servers (speed > {self.min_download_speed} Mbps)"
-                        )
-                    else:
-                        self.ui.warning(
-                            f"Goal not achieved: {viable_servers}/{self.min_viable_servers} viable servers (speed > {self.min_download_speed} Mbps)"
-                        )
-                    self.ui.info(f"Detailed results saved in: {results_file}")
 
+                self.ui.header("TESTS COMPLETED")
+                self.ui.success(
+                    f"Tests successfully completed: {self.successful_servers} functional servers out of {len(tested_servers)} tested"
+                )
+                if viable_servers >= self.min_viable_servers:
+                    self.ui.success(
+                        f"Goal achieved: {viable_servers}/{self.min_viable_servers} viable servers (speed > {self.min_download_speed} Mbps)"
+                    )
+                else:
+                    self.ui.warning(
+                        f"Goal not achieved: {viable_servers}/{self.min_viable_servers} viable servers (speed > {self.min_download_speed} Mbps)"
+                    )
+                self.ui.info(f"Detailed results saved in: {results_file}")
+
+                if self.interactive:
                     print("\nWould you like to open the results file?")
                     choice = input("Open file? (y/n): ").strip().lower()
                     if choice.startswith('y'):
@@ -1238,14 +1216,9 @@ class MullvadTester:
                                 subprocess.call(('xdg-open', results_file))
                         except Exception as e:
                             self.ui.error(f"Unable to open file: {e}")
-                else:
-                    print(f"\nTests completed with {self.successful_servers} functional servers out of {len(tested_servers)} tested.")
-                    print(f"Viable servers (speed > {self.min_download_speed} Mbps): {viable_servers}/{self.min_viable_servers} required")
-                    print(f"Results saved in {results_file}")
             else:
                 logger.error("No test results available to generate summary")
-                if self.interactive:
-                    self.ui.error("No test results available to generate a summary.")
+                self.ui.error("No test results available to generate a summary.")
 
     def _write_server_results_to_file(self, file, server, speedtest_result, mtr_result, viable):
         """Write server test results to the log file"""
@@ -1409,13 +1382,12 @@ class MullvadTester:
                         f.write(f"Average Upload Speed: {avg_upload:.2f} Mbps\n")
                         f.write(f"Average Latency: {avg_latency:.2f} ms\n")
                         
-                        if self.interactive:
-                            self.ui.header("GLOBAL STATISTICS")
-                            self.ui.info(f"Average connection time: {avg_connection_time:.2f} seconds")
-                            self.ui.info(f"Average download speed: {avg_download:.2f} Mbps")
-                            self.ui.info(f"Average upload speed: {avg_upload:.2f} Mbps")
-                            self.ui.info(f"Average latency: {avg_latency:.2f} ms")
-                            print("")
+                        self.ui.header("GLOBAL STATISTICS")
+                        self.ui.info(f"Average connection time: {avg_connection_time:.2f} seconds")
+                        self.ui.info(f"Average download speed: {avg_download:.2f} Mbps")
+                        self.ui.info(f"Average upload speed: {avg_upload:.2f} Mbps")
+                        self.ui.info(f"Average latency: {avg_latency:.2f} ms")
+                        self.ui.info("")
                     else: f.write("\nNo valid test results available for statistics\n")
 
                     # Calculate best servers
@@ -1443,15 +1415,13 @@ class MullvadTester:
                 else:
                     f.write("\nNo viable servers found.\n")
                     f.write(f"Consider increasing the distance range or checking your connection.\n")
-                    
-                    if self.interactive:
-                        self.ui.warning("No viable servers found.")
-                        self.ui.info("Consider increasing the distance range or checking your connection.")
+
+                    self.ui.warning("No viable servers found.")
+                    self.ui.info("Consider increasing the distance range or checking your connection.")
 
         except Exception as e:
             logger.error(f"Error generating summary: {e}")
-            if self.interactive:
-                self.ui.error(f"Error generating summary: {e}")
+            self.ui.error(f"Error generating summary: {e}")
 
     def _calculate_best_overall_servers(self, viable_hostname_set):
         """Calculate best overall servers using a weighted scoring system"""
