@@ -75,9 +75,6 @@ def display_parameters_summary(args, ui, countdown_seconds=5):
     for param in params:
         ui.info(param)
 
-    if not ui.interactive:
-        return
-
     print(f"\nTests will start in {countdown_seconds} seconds. Press Ctrl+C to cancel...")
     try:
         for i in range(countdown_seconds, 0, -1):
@@ -155,8 +152,6 @@ def input_coordinates(ui):
 
 def print_welcome(ui):
     """Print a welcome message with ASCII art"""
-    if not ui.interactive:
-        return
     title = """
  __  __         _ _               _  __     _______  _   _   _____         _
 |  \/  |       | | |             | | \ \   /  /  _ \| \ | | |_   _|       | |
@@ -182,7 +177,7 @@ class MullvadTester:
         
         # Set up logging and instance variables
         logger.setLevel(logging.INFO if verbose else logging.WARNING)
-        self.target_host, self.interactive = target_host, interactive
+        self.target_host = target_host
         self.max_servers_hard_limit = max_servers_hard_limit
         self.min_download_speed = min_download_speed
         self.default_connection_timeout = connection_timeout
@@ -191,7 +186,7 @@ class MullvadTester:
         self.ui = DisplayManager(interactive)
         
         # Get reference location
-        if interactive and reference_location == DEFAULT_LOCATION:
+        if reference_location == DEFAULT_LOCATION:
             reference_location = input_location(self.ui)
         
         self.reference_location = reference_location
@@ -219,10 +214,9 @@ class MullvadTester:
         logger.info(f"Found {len(self.servers)} Mullvad servers")
         logger.info(f"Reference location: {reference_location} ({self.reference_coords})")
         
-        if interactive:
-            self.ui.success(f"Mullvad servers found: {len(self.servers)}")
-            self.ui.info(f"Reference location: {reference_location}")
-            self.ui.info(f"Coordinates: ({self.reference_coords[0]:.4f}, {self.reference_coords[1]:.4f})")
+        self.ui.success(f"Mullvad servers found: {len(self.servers)}")
+        self.ui.info(f"Reference location: {reference_location}")
+        self.ui.info(f"Coordinates: ({self.reference_coords[0]:.4f}, {self.reference_coords[1]:.4f})")
 
     def log_and_info(self, message):
         """Log an info message and display it to the user."""
@@ -331,9 +325,7 @@ class MullvadTester:
 
     def _handle_geocode_failure(self, location):
         """Fallback handling when geocoding fails"""
-        if self.interactive:
-            return self._manual_coordinates_flow(location)
-        return self._default_coordinates(location)
+        return self._manual_coordinates_flow(location)
 
     def _manual_coordinates_flow(self, location):
         """Interactive flow for manual location or coordinate input"""
@@ -350,14 +342,6 @@ class MullvadTester:
         self.coords_cache[location] = coords
         self._save_coords_cache()
         return coords
-
-    def _default_coordinates(self, location):
-        """Return default coordinates for non-interactive fallback"""
-        if self.default_coords:
-            return self.default_coords
-        if location.lower().startswith("beijing"):
-            return BEIJING_COORDS
-        return (0.0, 0.0)
 
     def _calculate_distance(self, server_coords):
         """Calculate distance between server and reference location"""
@@ -421,14 +405,10 @@ class MullvadTester:
         except subprocess.CalledProcessError as e:
             self.log_and_error(f"Error retrieving server list: {e}")
             self.ui.warning("Please verify that Mullvad VPN is correctly installed and configured.")
-            if self.interactive:
-                sys.exit(1)
-            return []
+            sys.exit(1)
         except Exception as e:
             self.log_and_error(f"Unexpected error retrieving server list: {e}")
-            if self.interactive:
-                sys.exit(1)
-            return []
+            sys.exit(1)
 
     def _get_location_continent(self, location):
         """Determine which continent a location is in"""
@@ -480,8 +460,7 @@ class MullvadTester:
         self.ui.success(f"Servers selected for calibration: {len(test_servers)}")
         for server in test_servers:
             self.ui.info(f"  • {server.hostname} ({server.city}, {server.country})")
-        if not self.interactive:
-            print(f"Testing {len(test_servers)} servers for connection calibration")
+        self.ui.info(f"Testing {len(test_servers)} servers for connection calibration")
         
         # Test connection times
         self.connection_timeout = self.default_connection_timeout
@@ -746,10 +725,9 @@ class MullvadTester:
         """Connect to a specific Mullvad server with timeout"""
         try:
             logger.info(f"Connecting to server {server.hostname} ({server.city}, {server.country})...")
-            if self.interactive:
-                self.ui.header(f"SERVER TEST: {server.hostname}")
-                print(format_server_info(server))
-                self.ui.connection_status(server.hostname, "connecting")
+            self.ui.header(f"SERVER TEST: {server.hostname}")
+            self.ui.info(format_server_info(server))
+            self.ui.connection_status(server.hostname, "connecting")
 
             connection_start_time = time.time()
             total_timeout = self.connection_timeout
@@ -788,51 +766,38 @@ class MullvadTester:
             
             self.ui.info(f"Waiting for connection confirmation (total timeout: {total_timeout:.1f}s)...")
 
-            if self.interactive:
-                poll_interval = 0.1  # Check every 0.1 seconds for smoother progress bar
-                max_steps = int(remaining_time / poll_interval)
+            poll_interval = 0.1  # Check every 0.1 seconds for smoother progress bar
+            max_steps = int(remaining_time / poll_interval)
 
-                for i in range(max_steps):
-                    current_time = time.time()
-                    total_elapsed = current_time - connection_start_time
-                    
-                    if total_elapsed >= total_timeout: break
-                        
-                    try:
-                        output = subprocess.check_output(["mullvad", "status"], text=True, timeout=2)
-                        if "Connected" in output:
-                            server.connection_time = total_elapsed
-                            logger.info(f"Successfully connected to server in {total_elapsed:.2f} seconds")
-                            print(f"\r{' ' * get_terminal_width()}", end='\r')
-                            self.ui.connection_status(server.hostname, "success", total_elapsed)
-                            return True
-                    except: pass
-                    
-                    self.ui.progress_bar(
-                        total_elapsed, total_timeout,
-                        prefix=f"{get_symbol('connecting')} Connection: ", 
-                        suffix=f"{total_elapsed:.1f}s / {total_timeout:.1f}s"
-                    )
-                    time.sleep(poll_interval)
-                    
-                print(f"\r{' ' * get_terminal_width()}", end='\r')  # Clear progress bar
-                self.ui.connection_status(server.hostname, "timeout")
-                self.ui.info(f"Server {server.hostname} did not respond within the timeout of {total_timeout:.1f}s")
-            else:
-                # Non-interactive mode - more efficient polling
-                poll_interval = 0.2
-                end_time = connection_start_time + total_timeout
-                
-                while time.time() < end_time:
-                    try:
-                        result = run_command(["mullvad", "status"], timeout=2)
-                        if result and not isinstance(result, Exception) and "Connected" in result.stdout:
-                            server.connection_time = time.time() - connection_start_time
-                            logger.info(f"Successfully connected to server in {server.connection_time:.2f} seconds")
-                            return True
-                    except: pass
-                    time.sleep(poll_interval)
-            
+            for i in range(max_steps):
+                current_time = time.time()
+                total_elapsed = current_time - connection_start_time
+
+                if total_elapsed >= total_timeout:
+                    break
+
+                try:
+                    output = subprocess.check_output(["mullvad", "status"], text=True, timeout=2)
+                    if "Connected" in output:
+                        server.connection_time = total_elapsed
+                        logger.info(f"Successfully connected to server in {total_elapsed:.2f} seconds")
+                        print(f"\r{' ' * get_terminal_width()}", end='\r')
+                        self.ui.connection_status(server.hostname, "success", total_elapsed)
+                        return True
+                except:
+                    pass
+
+                self.ui.progress_bar(
+                    total_elapsed, total_timeout,
+                    prefix=f"{get_symbol('connecting')} Connection: ",
+                    suffix=f"{total_elapsed:.1f}s / {total_timeout:.1f}s"
+                )
+                time.sleep(poll_interval)
+
+            print(f"\r{' ' * get_terminal_width()}", end='\r')  # Clear progress bar
+            self.ui.connection_status(server.hostname, "timeout")
+            self.ui.info(f"Server {server.hostname} did not respond within the timeout of {total_timeout:.1f}s")
+
             logger.warning(f"Failed to connect to server within {total_timeout:.1f} seconds")
             server.connection_time = 0
             return False
@@ -1115,19 +1080,18 @@ class MullvadTester:
                 )
             self.ui.info(f"Detailed results saved in: {results_file}")
 
-            if self.interactive:
-                print("\nWould you like to open the results file?")
-                choice = input("Open file? (y/n): ").strip().lower()
-                if choice.startswith('y'):
-                    try:
-                        if sys.platform == 'darwin':
-                            subprocess.call(('open', results_file))
-                        elif sys.platform == 'win32':
-                            os.startfile(results_file)
-                        else:
-                            subprocess.call(('xdg-open', results_file))
-                    except Exception as e:
-                        self.ui.error(f"Unable to open file: {e}")
+            print("\nWould you like to open the results file?")
+            choice = input("Open file? (y/n): ").strip().lower()
+            if choice.startswith('y'):
+                try:
+                    if sys.platform == 'darwin':
+                        subprocess.call(('open', results_file))
+                    elif sys.platform == 'win32':
+                        os.startfile(results_file)
+                    else:
+                        subprocess.call(('xdg-open', results_file))
+                except Exception as e:
+                    self.ui.error(f"Unable to open file: {e}")
         else:
             self.log_and_error("No test results available to generate a summary.")
 
@@ -1217,15 +1181,15 @@ class MullvadTester:
             for row in rows: file_handle.write(row + "\n")
             file_handle.write(separator + "\n")
             
-        # Display in terminal if interactive
-        if self.interactive:
-            self.ui.header(title)
-            print(separator)
-            print(colorize(header, Fore.CYAN))
-            print(separator)
-            for row in rows: print(row)
-            print(separator)
-            print("")  # Add a blank line
+        # Display in terminal
+        self.ui.header(title)
+        print(separator)
+        print(colorize(header, Fore.CYAN))
+        print(separator)
+        for row in rows:
+            print(row)
+        print(separator)
+        print("")  # Add a blank line
         
         return separator, header, rows
 
@@ -1333,22 +1297,21 @@ class MullvadTester:
                             header_list=["Server", "Country", "Distance", "Score"]
                         )
                         
-                        if self.interactive:
-                            self.ui.header("BEST SERVERS DETAILS")
-                            for hostname, score in best_servers[:3]:
-                                server = next(s for s in self.servers if s.hostname == hostname)
-                                speed_result, mtr_result, _ = self.results[hostname]
-                                print(
-                                    f"{colorize(hostname, Fore.CYAN)} ({server.city}, {server.country}): "
-                                    f"Score {colorize(f'{score:.2f}', Fore.GREEN)}"
-                                )
-                                print(
-                                    f"  → {colorize('↓'+f'{speed_result.download_speed:.1f} Mbps', Fore.GREEN)} "
-                                    f"{colorize('↑'+f'{speed_result.upload_speed:.1f} Mbps', Fore.BLUE)} "
-                                    f"{colorize('⏱'+f'{mtr_result.avg_latency:.1f} ms', Fore.YELLOW)}, "
-                                    f"Loss: {mtr_result.packet_loss:.1f}%"
-                                )
-                            print("")
+                        self.ui.header("BEST SERVERS DETAILS")
+                        for hostname, score in best_servers[:3]:
+                            server = next(s for s in self.servers if s.hostname == hostname)
+                            speed_result, mtr_result, _ = self.results[hostname]
+                            print(
+                                f"{colorize(hostname, Fore.CYAN)} ({server.city}, {server.country}): "
+                                f"Score {colorize(f'{score:.2f}', Fore.GREEN)}"
+                            )
+                            print(
+                                f"  → {colorize('↓'+f'{speed_result.download_speed:.1f} Mbps', Fore.GREEN)} "
+                                f"{colorize('↑'+f'{speed_result.upload_speed:.1f} Mbps', Fore.BLUE)} "
+                                f"{colorize('⏱'+f'{mtr_result.avg_latency:.1f} ms', Fore.YELLOW)}, "
+                                f"Loss: {mtr_result.packet_loss:.1f}%"
+                            )
+                        print("")
                 else:
                     f.write("\nNo viable servers found.\n")
                     f.write(f"Consider increasing the distance range or checking your connection.\n")
@@ -1384,8 +1347,6 @@ class MullvadTester:
 
 def input_custom_parameters(args, ui):
     """Interactive function to customize test parameters before the summary"""
-    if not args.interactive:
-        return args  # In non-interactive mode, use command-line parameters
 
     ui.header("CUSTOMIZATION OF TEST PARAMETERS")
     ui.info("You can customize the test parameters before starting.")
