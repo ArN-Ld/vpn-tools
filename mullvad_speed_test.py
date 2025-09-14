@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from functools import lru_cache
 import argparse
+from ui.display_manager import DisplayManager
 
 # Constants
 DEFAULT_MAX_SERVERS, MAX_SERVERS_HARD_LIMIT = 15, 45
@@ -345,6 +346,7 @@ class MullvadTester:
         self.default_connection_timeout = connection_timeout
         self.min_viable_servers = min_viable_servers
         self.db_file = db_file
+        self.ui = DisplayManager(interactive)
         
         # Get reference location
         if interactive and reference_location == DEFAULT_LOCATION:
@@ -387,11 +389,11 @@ class MullvadTester:
                 with open(COORDS_CACHE_FILE, 'rb') as f:
                     cache = pickle.load(f)
                     logger.info(f"Loaded {len(cache)} location coordinates from cache")
-                    if self.interactive: print_info(f"Loaded {len(cache)} coordinates from cache")
+                    self.ui.info(f"Loaded {len(cache)} coordinates from cache")
                     return cache
             except Exception as e:
                 logger.warning(f"Could not load coordinates cache: {e}")
-                if self.interactive: print_warning(f"Could not load coordinates cache: {e}")
+                self.ui.warning(f"Could not load coordinates cache: {e}")
         return {}
 
     def _save_coords_cache(self):
@@ -431,14 +433,14 @@ class MullvadTester:
             if 'viable' not in columns:
                 logger.info("Adding 'viable' column to server_results table")
                 c.execute("ALTER TABLE server_results ADD COLUMN viable INTEGER DEFAULT 0")
-                if self.interactive: print_info("Adding 'viable' column to existing database")
+                self.ui.info("Adding 'viable' column to existing database")
             
             conn.commit()
             conn.close()
             logger.info("Database initialized successfully")
         except Exception as e:
             logger.error(f"Error initializing database: {e}")
-            if self.interactive: print_error(f"Error initializing database: {e}")
+            self.ui.error(f"Error initializing database: {e}")
 
     def _get_location_coordinates(self):
         """Get coordinates for reference location"""
@@ -448,7 +450,7 @@ class MullvadTester:
         if location in self.coords_cache:
             coords = self.coords_cache[location]
             logger.info(f"Using cached coordinates for {location}: {coords}")
-            if self.interactive: print_info(f"Using cached coordinates for {location}: {coords}")
+            self.ui.info(f"Using cached coordinates for {location}: {coords}")
             return coords
         
         # Load geopy modules
@@ -458,23 +460,23 @@ class MullvadTester:
             geolocator = Nominatim(user_agent="mullvad_speed_test")
             
             if self.interactive:
-                print_info(f"Searching for coordinates for {location}...")
+                self.ui.info(f"Searching for coordinates for {location}...")
                 location_data = geolocator.geocode(location, exactly_one=True)
-                
+
                 if location_data:
                     coords = (location_data.latitude, location_data.longitude)
-                    print_success(f"Location found: {location_data.address}")
-                    print_success(f"Coordinates: {coords}")
-                    
+                    self.ui.success(f"Location found: {location_data.address}")
+                    self.ui.success(f"Coordinates: {coords}")
+
                     self.coords_cache[location] = coords
                     self._save_coords_cache()
                     return coords
                 else:
-                    print_error(f"Unable to find coordinates for: {location}")
-                    print_header("LOCATION OPTIONS")
+                    self.ui.error(f"Unable to find coordinates for: {location}")
+                    self.ui.header("LOCATION OPTIONS")
                     print("1. Try another location")
                     print("2. Enter coordinates manually")
-                    
+
                     choice = input("\nYour choice (1/2): ").strip()
                     if choice == "1":
                         new_location = input_location()
@@ -505,7 +507,7 @@ class MullvadTester:
             logger.warning(f"Error getting coordinates for {location}: {e}")
             
             if self.interactive:
-                print_error(f"Error searching for coordinates: {e}")
+                self.ui.error(f"Error searching for coordinates: {e}")
                 coords = input_coordinates()
                 self.coords_cache[location] = coords
                 self._save_coords_cache()
@@ -526,7 +528,7 @@ class MullvadTester:
         servers = []
         try:
             logger.info("Fetching Mullvad server list...")
-            if self.interactive: print_info("Retrieving Mullvad server list...")
+            self.ui.info("Retrieving Mullvad server list...")
                 
             output = subprocess.check_output(["mullvad", "relay", "list"], text=True)
             
@@ -570,25 +572,22 @@ class MullvadTester:
                             longitude=current_coords[1], distance_km=distance
                         ))
 
-            if self.interactive:
-                run_with_spinner("Processing server data", lambda stop_event: process_lines())
-            else:
-                process_lines()
+            self.ui.spinner("Processing server data", lambda stop_event: process_lines())
 
             # Sort servers by distance - more efficient than sorting during processing
             return sorted(servers, key=lambda x: x.distance_km)
             
         except subprocess.CalledProcessError as e:
             logger.error(f"Error getting server list: {e}")
+            self.ui.error(f"Error retrieving server list: {e}")
+            self.ui.warning("Please verify that Mullvad VPN is correctly installed and configured.")
             if self.interactive:
-                print_error(f"Error retrieving server list: {e}")
-                print_warning("Please verify that Mullvad VPN is correctly installed and configured.")
                 sys.exit(1)
             return []
         except Exception as e:
             logger.error(f"Unexpected error while getting server list: {e}")
+            self.ui.error(f"Unexpected error retrieving server list: {e}")
             if self.interactive:
-                print_error(f"Unexpected error retrieving server list: {e}")
                 sys.exit(1)
             return []
 
@@ -620,9 +619,8 @@ class MullvadTester:
         
     def run_connection_calibration(self):
         """Run connection tests on servers from different continents to calibrate timeout"""
-        if self.interactive:
-            print_header("CONNECTION CALIBRATION")
-            print_info("Selecting servers from each continent to determine average connection time...")
+        self.ui.header("CONNECTION CALIBRATION")
+        self.ui.info("Selecting servers from each continent to determine average connection time...")
         
         # Group servers by country and continent more efficiently
         server_countries = {}
@@ -642,16 +640,15 @@ class MullvadTester:
         
         # Determine user's continent
         self.user_continent = self._get_location_continent(self.reference_location)
-        if self.interactive: print_info(f"Your location appears to be in: {self.user_continent}")
+        self.ui.info(f"Your location appears to be in: {self.user_continent}")
         
         # Select test servers - one from each continent
         test_servers = [random.choice(servers) for continent, servers in available_continents.items() if servers]
         
-        if self.interactive:
-            print_success(f"Servers selected for calibration: {len(test_servers)}")
-            for server in test_servers: print_info(f"  • {server.hostname} ({server.city}, {server.country})")
-            print("")
-        else:
+        self.ui.success(f"Servers selected for calibration: {len(test_servers)}")
+        for server in test_servers:
+            self.ui.info(f"  • {server.hostname} ({server.city}, {server.country})")
+        if not self.interactive:
             print(f"Testing {len(test_servers)} servers for connection calibration")
         
         # Test connection times
@@ -659,7 +656,7 @@ class MullvadTester:
         conn_times = []
         
         for server in test_servers:
-            if self.interactive: print_info(f"Testing {server.hostname}...")
+            self.ui.info(f"Testing {server.hostname}...")
             
             if self.connect_to_server(server):
                 conn_times.append(server.connection_time)
@@ -671,18 +668,16 @@ class MullvadTester:
             avg_conn_time = sum(conn_times) / len(conn_times)
             self.connection_timeout = max(min(avg_conn_time * 1.5, self.default_connection_timeout), 10.0)
             
-            if self.interactive:
-                print_success(f"Average connection time: {avg_conn_time:.2f}s")
-                print_success(f"Connection timeout adjusted to: {self.connection_timeout:.2f}s")
+            self.ui.success(f"Average connection time: {avg_conn_time:.2f}s")
+            self.ui.success(f"Connection timeout adjusted to: {self.connection_timeout:.2f}s")
             
             logger.info(f"Calibrated connection timeout to {self.connection_timeout:.2f}s based on average {avg_conn_time:.2f}s")
             return avg_conn_time
         else:
             self.connection_timeout = self.default_connection_timeout
             
-            if self.interactive:
-                print_warning("No servers responded, using default timeout")
-                print_info(f"Connection timeout: {self.connection_timeout:.2f}s")
+            self.ui.warning("No servers responded, using default timeout")
+            self.ui.info(f"Connection timeout: {self.connection_timeout:.2f}s")
             
             logger.warning("No servers responded during calibration, using default timeout")
             return None
@@ -719,8 +714,7 @@ class MullvadTester:
                 country_city_servers[country_code] = {}
             country_city_servers[country_code].setdefault(city, []).append(server)
 
-        if self.interactive:
-            print_info(f"Selecting up to {max_total_servers} servers (max {max_per_country} per country)")
+        self.ui.info(f"Selecting up to {max_total_servers} servers (max {max_per_country} per country)")
         
         # Sort countries by distance
         countries_by_distance = []
@@ -766,9 +760,8 @@ class MullvadTester:
             selected_servers.extend(country_servers)
             countries_processed += 1
             
-            if self.interactive:
-                cities_count = len(set(s.city for s in country_servers))
-                print_info(f"Selected {len(country_servers)} servers from {cities_count} cities in {country_code}")
+            cities_count = len(set(s.city for s in country_servers))
+            self.ui.info(f"Selected {len(country_servers)} servers from {cities_count} cities in {country_code}")
         
         # Ensure we have exactly the right number of servers
         if len(selected_servers) > max_total_servers:
@@ -785,27 +778,23 @@ class MullvadTester:
         selected_servers.sort(key=lambda x: x.distance_km)
         
         # Display success message
-        if self.interactive:
-            msg = f"Selected {len(selected_servers)} servers from {countries_processed} countries"
-            if exclude_continent:
-                msg += f" outside of {exclude_continent}"
-            print_success(msg)
-            
-            # Display selected countries and server counts
-            if exclude_continent:
-                print_info("Selected countries and server counts:")
-                for country_code, count in sorted(selected_countries.items(), key=lambda x: x[1], reverse=True):
-                    # Find country name from country code
-                    country_name = None
-                    for server in self.servers:
-                        if server.hostname.startswith(country_code):
-                            country_name = server.country
-                            break
-                    
-                    if country_name:
-                        print_info(f"  • {country_name} ({country_code}): {count} servers")
-                    else:
-                        print_info(f"  • {country_code}: {count} servers")
+        msg = f"Selected {len(selected_servers)} servers from {countries_processed} countries"
+        if exclude_continent:
+            msg += f" outside of {exclude_continent}"
+        self.ui.success(msg)
+
+        if exclude_continent:
+            self.ui.info("Selected countries and server counts:")
+            for country_code, count in sorted(selected_countries.items(), key=lambda x: x[1], reverse=True):
+                country_name = None
+                for server in self.servers:
+                    if server.hostname.startswith(country_code):
+                        country_name = server.country
+                        break
+                if country_name:
+                    self.ui.info(f"  • {country_name} ({country_code}): {count} servers")
+                else:
+                    self.ui.info(f"  • {country_code}: {count} servers")
         
         return selected_servers
 
@@ -813,9 +802,7 @@ class MullvadTester:
         """Run speedtest-cli and return results"""
         try:
             logger.info("Running speedtest...")
-            if self.interactive:
-                print("")  # Add a blank line for readability
-                print_info("Running speed test...")
+            self.ui.info("Running speed test...")
                 
             cmd = ["speedtest-cli", "--json", "--secure", "--timeout", "20"]
 
@@ -829,29 +816,29 @@ class MullvadTester:
                     stdout, stderr = process.communicate()
                     return stdout, stderr, process.returncode
 
-                result, timed_out, elapsed_time = run_with_spinner(
+                result, timed_out, elapsed_time = self.ui.spinner(
                     f"{get_symbol('speedometer')} Speed test in progress",
                     action,
                     timeout=MAX_SPEEDTEST_TIME,
                 )
 
                 if timed_out:
-                    print_info(f"Speed test canceled after {MAX_SPEEDTEST_TIME}s (maximum time reached)")
+                    self.ui.info(f"Speed test canceled after {MAX_SPEEDTEST_TIME}s (maximum time reached)")
                     return SpeedTestResult(0, 0, 0, 0, 100)
 
                 stdout, stderr, returncode = result
 
                 if elapsed_time < MIN_SPEEDTEST_TIME:
-                    print(f"\r{get_symbol('speedometer')} Speed test completed too quickly ({elapsed_time:.1f}s), may be unreliable ", end='')
+                    self.ui.info(f"{get_symbol('speedometer')} Speed test completed too quickly ({elapsed_time:.1f}s), may be unreliable")
                     logger.warning(f"Speed test completed too quickly: {elapsed_time:.2f}s < {MIN_SPEEDTEST_TIME}s minimum")
                     time.sleep(1)
 
                 if returncode != 0:
                     if stderr and "403: Forbidden" in stderr:
-                        print_info("Speedtest service unavailable from this VPN server (IP likely blocked)")
+                        self.ui.info("Speedtest service unavailable from this VPN server (IP likely blocked)")
                         logger.warning("Speedtest service blocked this VPN server's IP address (403 Forbidden)")
                     else:
-                        print_info(f"Speed test failed: {stderr if stderr else 'Unknown error'}")
+                        self.ui.info(f"Speed test failed: {stderr if stderr else 'Unknown error'}")
                         logger.error(f"Speedtest failed: {stderr}")
                     return SpeedTestResult(0, 0, 0, 0, 100)
 
@@ -860,7 +847,7 @@ class MullvadTester:
                 try:
                     data = json.loads(stdout)
                 except json.JSONDecodeError as e:
-                    print_info("Speed test results not usable (JSON parsing error)")
+                    self.ui.info("Speed test results not usable (JSON parsing error)")
                     logger.error(f"JSON parse error on output: {e}")
                     return SpeedTestResult(0, 0, 0, 0, 100)
             else:
@@ -882,7 +869,7 @@ class MullvadTester:
             if not all(field in data for field in required_fields):
                 field = next((f for f in required_fields if f not in data), "unknown field")
                 logger.error(f"Missing required field in speedtest result: {field}")
-                if self.interactive: print_info(f"Speed test results missing required data (no {field})")
+                self.ui.info(f"Speed test results missing required data (no {field})")
                 return SpeedTestResult(0, 0, 0, 0, 100)
 
             # Create SpeedTestResult from data
@@ -897,21 +884,20 @@ class MullvadTester:
             logger.info(f"Speedtest results - Download: {result.download_speed:.2f} Mbps, "
                        f"Upload: {result.upload_speed:.2f} Mbps, Ping: {result.ping:.2f} ms")
             
-            if self.interactive:
-                print_success("Speed test results:")
-                print(format_speedtest_results(result))
+            self.ui.success("Speed test results:")
+            self.ui.info(format_speedtest_results(result))
                 
             return result
         except Exception as e:
             logger.error(f"Unexpected error during speedtest: {e}")
-            if self.interactive: print_info(f"Speed test unavailable (technical error: {str(e)[:50]})")
+            self.ui.info(f"Speed test unavailable (technical error: {str(e)[:50]})")
             return SpeedTestResult(0, 0, 0, 0, 100)
 
     def _run_mtr(self):
         """Run mtr and return results"""
         try:
             logger.info(f"Running MTR to {self.target_host}...")
-            if self.interactive: print_info(f"Running MTR test to {self.target_host}...")
+            self.ui.info(f"Running MTR test to {self.target_host}...")
                 
             count, timeout = 10, 60
             
@@ -928,14 +914,14 @@ class MullvadTester:
                     stdout, stderr = process.communicate()
                     return stdout, stderr, process.returncode
 
-                result, timed_out, _ = run_with_spinner(
+                result, timed_out, _ = self.ui.spinner(
                     f"{get_symbol('ping')} MTR test in progress",
                     action,
                     timeout=timeout,
                 )
 
                 if timed_out or result[2] != 0:
-                    print_info("MTR test failed")
+                    self.ui.info("MTR test failed")
                     return MtrResult(0, 100, 0)
 
                 stdout, stderr, _ = result
@@ -951,7 +937,7 @@ class MullvadTester:
             lines = output.strip().split('\n')[1:]  # Skip header
             if not lines:
                 logger.warning("No MTR results received")
-                if self.interactive: print_warning("No MTR results received")
+                self.ui.warning("No MTR results received")
                 return MtrResult(0, 100, 0)
 
             # Extract data from last line (direct access instead of multiple splits)
@@ -963,14 +949,13 @@ class MullvadTester:
             logger.info(f"MTR results - Latency: {avg_latency:.2f} ms, "
                        f"Packet Loss: {packet_loss:.2f}%, Hops: {hops}")
             
-            if self.interactive:
-                print_success("MTR test results:")
-                print(format_mtr_results(result=MtrResult(avg_latency, packet_loss, hops)))
+            self.ui.success("MTR test results:")
+            self.ui.info(format_mtr_results(result=MtrResult(avg_latency, packet_loss, hops)))
                 
             return MtrResult(avg_latency, packet_loss, hops)
         except Exception as e:
             logger.error(f"Unexpected error during MTR test: {e}")
-            if self.interactive: print_info(f"MTR test unavailable (technical error)")
+            self.ui.info("MTR test unavailable (technical error)")
             return MtrResult(0, 100, 0)
 
     def connect_to_server(self, server):
@@ -978,7 +963,7 @@ class MullvadTester:
         try:
             logger.info(f"Connecting to server {server.hostname} ({server.city}, {server.country})...")
             if self.interactive:
-                print_header(f"SERVER TEST: {server.hostname}")
+                self.ui.header(f"SERVER TEST: {server.hostname}")
                 if COLOR_SUPPORT:
                     print(f"{Fore.CYAN}{get_symbol('server').rstrip()}  {server.hostname} "
                         f"{Fore.WHITE}({server.city}, {server.country}) "
@@ -987,13 +972,13 @@ class MullvadTester:
                     print(f"{get_symbol('server').rstrip()}  {server.hostname} "
                         f"({server.city}, {server.country}) "
                         f"{server.distance_km:.0f} km")
-                print_connection_status(server.hostname, "connecting")
+                self.ui.connection_status(server.hostname, "connecting")
 
             connection_start_time = time.time()
             total_timeout = self.connection_timeout
             
             try:
-                if self.interactive: print_info(f"Configuring relay...")
+                self.ui.info(f"Configuring relay...")
                 
                 # Configure relay
                 result = run_command(
@@ -1002,10 +987,10 @@ class MullvadTester:
                 )
                 
                 if result is None or isinstance(result, Exception):
-                    if self.interactive: print_connection_status(server.hostname, "error")
+                    if self.interactive: self.ui.connection_status(server.hostname, "error")
                     return False
                 
-                if self.interactive: print_info(f"Initiating connection...")
+                self.ui.info(f"Initiating connection...")
                     
                 # Connect to VPN
                 result = run_command(
@@ -1014,11 +999,11 @@ class MullvadTester:
                 )
                 
                 if result is None or isinstance(result, Exception):
-                    if self.interactive: print_connection_status(server.hostname, "error")
+                    if self.interactive: self.ui.connection_status(server.hostname, "error")
                     return False
                 
             except Exception:
-                if self.interactive: print_connection_status(server.hostname, "error")
+                if self.interactive: self.ui.connection_status(server.hostname, "error")
                 return False
                 
             elapsed_setup_time = time.time() - connection_start_time
@@ -1667,28 +1652,7 @@ def check_optional_dependencies():
 
 def main():
     """Main function"""
-    # Check dependencies
-    missing_deps = check_dependencies()
-    if missing_deps:
-        print_error("Missing dependencies detected:")
-        for dep in missing_deps: print_error(f"- {dep}")
-        print("\nPlease install these dependencies before running the script.")
-        if "speedtest-cli" in missing_deps: print("Install speedtest-cli: pip install speedtest-cli")
-        if "mtr" in missing_deps: print("Install mtr: use your package manager")
-        if "Mullvad VPN CLI" in missing_deps: print("Install Mullvad VPN from https://mullvad.net")
-        sys.exit(1)
-    
-    # Print welcome message
-    print_welcome()
-    
-    # Check optional dependencies
-    suggested_deps = check_optional_dependencies()
-    if suggested_deps:
-        print_info("Recommended optional dependencies:")
-        for dep in suggested_deps: print(f"- {dep}")
-        print("")
-
-    # Set up command-line arguments
+    # Set up command-line arguments early so --help works without dependencies
     parser = argparse.ArgumentParser(description='Test Mullvad VPN servers performance')
     
     # Basic options
@@ -1730,10 +1694,31 @@ def main():
     # Default to interactive mode if no args are provided
     parser.set_defaults(interactive=len(sys.argv) <= 1)
     args = parser.parse_args()
-    
+
+    # Check required dependencies after parsing arguments
+    missing_deps = check_dependencies()
+    if missing_deps:
+        print_error("Missing dependencies detected:")
+        for dep in missing_deps: print_error(f"- {dep}")
+        print("\nPlease install these dependencies before running the script.")
+        if "speedtest-cli" in missing_deps: print("Install speedtest-cli: pip install speedtest-cli")
+        if "mtr" in missing_deps: print("Install mtr: use your package manager")
+        if "Mullvad VPN CLI" in missing_deps: print("Install Mullvad VPN from https://mullvad.net")
+        sys.exit(1)
+
+    # Print welcome message
+    print_welcome()
+
+    # Check optional dependencies
+    suggested_deps = check_optional_dependencies()
+    if suggested_deps:
+        print_info("Recommended optional dependencies:")
+        for dep in suggested_deps: print(f"- {dep}")
+        print("")
+
     # Customize parameters in interactive mode
     args = input_custom_parameters(args)
-    
+
     # Display parameter summary
     display_parameters_summary(args, countdown_seconds=5)
 
