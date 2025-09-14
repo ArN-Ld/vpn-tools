@@ -139,7 +139,7 @@ sudo python mullvad-speedtest.py --min-download-speed 5.0 --min-viable-servers 1
 ## Supporting Modules
 
 ### Mullvad Coordinates (`mullvad_coordinates.py`)
-A database module containing accurate geographical coordinates for Mullvad server locations worldwide. Used by the speed test tool for precise distance calculations.
+A helper module that loads accurate geographical coordinates for Mullvad server locations from `coordinates.json`. The data is cached in memory at import time for fast lookups. If the main JSON file is missing, the module falls back to `coordinates.example.json` or an empty dataset. These coordinates are used by the speed test tool for precise distance calculations.
 
 ## Understanding Results
 
