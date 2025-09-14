@@ -274,35 +274,34 @@ class MullvadTester:
     def _init_database(self):
         """Initialize SQLite database for storing test results"""
         try:
-            conn = sqlite3.connect(self.db_file)
-            c = conn.cursor()
-            
-            # Create tables with a single SQL operation for efficiency
-            c.executescript('''
-                CREATE TABLE IF NOT EXISTS test_sessions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT,
-                    reference_location TEXT, reference_lat REAL, reference_lon REAL, protocol TEXT);
-                
-                CREATE TABLE IF NOT EXISTS server_results (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER,
-                    hostname TEXT, country TEXT, city TEXT, distance_km REAL,
-                    connection_time REAL, download_speed REAL, upload_speed REAL,
-                    ping REAL, jitter REAL, speedtest_packet_loss REAL,
-                    mtr_latency REAL, mtr_packet_loss REAL, mtr_hops INTEGER,
-                    viable INTEGER DEFAULT 0,
-                    FOREIGN KEY (session_id) REFERENCES test_sessions (id));
-            ''')
-            
-            # Check for viable column
-            c.execute("PRAGMA table_info(server_results)")
-            columns = [column[1] for column in c.fetchall()]
-            if 'viable' not in columns:
-                logger.info("Adding 'viable' column to server_results table")
-                c.execute("ALTER TABLE server_results ADD COLUMN viable INTEGER DEFAULT 0")
-                self.ui.info("Adding 'viable' column to existing database")
-            
-            conn.commit()
-            conn.close()
+            with sqlite3.connect(self.db_file) as conn:
+                c = conn.cursor()
+
+                # Create tables with a single SQL operation for efficiency
+                c.executescript('''
+                    CREATE TABLE IF NOT EXISTS test_sessions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT,
+                        reference_location TEXT, reference_lat REAL, reference_lon REAL, protocol TEXT);
+
+                    CREATE TABLE IF NOT EXISTS server_results (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT, session_id INTEGER,
+                        hostname TEXT, country TEXT, city TEXT, distance_km REAL,
+                        connection_time REAL, download_speed REAL, upload_speed REAL,
+                        ping REAL, jitter REAL, speedtest_packet_loss REAL,
+                        mtr_latency REAL, mtr_packet_loss REAL, mtr_hops INTEGER,
+                        viable INTEGER DEFAULT 0,
+                        FOREIGN KEY (session_id) REFERENCES test_sessions (id));
+                ''')
+
+                # Check for viable column
+                c.execute("PRAGMA table_info(server_results)")
+                columns = [column[1] for column in c.fetchall()]
+                if 'viable' not in columns:
+                    logger.info("Adding 'viable' column to server_results table")
+                    c.execute("ALTER TABLE server_results ADD COLUMN viable INTEGER DEFAULT 0")
+                    self.ui.info("Adding 'viable' column to existing database")
+
+                conn.commit()
             logger.info("Database initialized successfully")
         except Exception as e:
             logger.error(f"Error initializing database: {e}")
@@ -936,24 +935,23 @@ class MullvadTester:
     def _save_results_to_db(self, session_id, server, speedtest, mtr, viable):
         """Save server test results to SQLite database"""
         if session_id is None: return False
-            
+
         try:
-            conn = sqlite3.connect(self.db_file)
-            c = conn.cursor()
-            
-            c.execute('''INSERT INTO server_results (
-                session_id, hostname, country, city, distance_km, connection_time,
-                download_speed, upload_speed, ping, jitter, speedtest_packet_loss,
-                mtr_latency, mtr_packet_loss, mtr_hops, viable
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (
-                session_id, server.hostname, server.country, server.city, server.distance_km,
-                server.connection_time, speedtest.download_speed, speedtest.upload_speed,
-                speedtest.ping, speedtest.jitter, speedtest.packet_loss,
-                mtr.avg_latency, mtr.packet_loss, mtr.hops, 1 if viable else 0
-            ))
-            
-            conn.commit()
-            conn.close()
+            with sqlite3.connect(self.db_file) as conn:
+                c = conn.cursor()
+
+                c.execute('''INSERT INTO server_results (
+                    session_id, hostname, country, city, distance_km, connection_time,
+                    download_speed, upload_speed, ping, jitter, speedtest_packet_loss,
+                    mtr_latency, mtr_packet_loss, mtr_hops, viable
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (
+                    session_id, server.hostname, server.country, server.city, server.distance_km,
+                    server.connection_time, speedtest.download_speed, speedtest.upload_speed,
+                    speedtest.ping, speedtest.jitter, speedtest.packet_loss,
+                    mtr.avg_latency, mtr.packet_loss, mtr.hops, 1 if viable else 0
+                ))
+
+                conn.commit()
             logger.debug(f"Saved results for server {server.hostname} to database")
             return True
         
@@ -994,15 +992,14 @@ class MullvadTester:
         self.ui.info("")
 
         try:
-            conn = sqlite3.connect(self.db_file)
-            c = conn.cursor()
-            c.execute("INSERT INTO test_sessions (timestamp, reference_location, reference_lat, reference_lon, protocol) VALUES (?, ?, ?, ?, ?)", (
-                timestamp, self.reference_location,
-                self.reference_coords[0], self.reference_coords[1], protocol
-            ))
-            session_id = c.lastrowid
-            conn.commit()
-            conn.close()
+            with sqlite3.connect(self.db_file) as conn:
+                c = conn.cursor()
+                c.execute("INSERT INTO test_sessions (timestamp, reference_location, reference_lat, reference_lon, protocol) VALUES (?, ?, ?, ?, ?)", (
+                    timestamp, self.reference_location,
+                    self.reference_coords[0], self.reference_coords[1], protocol
+                ))
+                session_id = c.lastrowid
+                conn.commit()
             logger.info(f"Created new test session with ID {session_id}")
         except Exception as e:
             logger.error(f"Error creating test session in database: {e}")
