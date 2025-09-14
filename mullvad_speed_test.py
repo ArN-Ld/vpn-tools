@@ -35,6 +35,12 @@ CONTINENT_MAPPING = {
     'Africa': ['za', 'eg', 'ng', 'ke', 'ma']
 }
 
+COUNTRY_TO_CONTINENT = {
+    code: continent
+    for continent, codes in CONTINENT_MAPPING.items()
+    for code in codes
+}
+
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s',
                    handlers=[logging.FileHandler('mullvad_speed_test.log')])
@@ -440,9 +446,10 @@ class MullvadTester:
             
         for loc, continent in location_continents.items():
             if loc in location_lower: return continent
-            
-        for continent, countries in CONTINENT_MAPPING.items():
-            if any(country in location_lower for country in countries): return continent
+
+        for code, continent in COUNTRY_TO_CONTINENT.items():
+            if code in location_lower:
+                return continent
         
         logger.warning(f"Could not determine continent for {location}, defaulting to Europe")
         return "Europe"
@@ -452,21 +459,13 @@ class MullvadTester:
         self.ui.header("CONNECTION CALIBRATION")
         self.ui.info("Selecting servers from each continent to determine average connection time...")
         
-        # Group servers by country and continent more efficiently
-        server_countries = {}
+        # Group servers by continent
+        available_continents = defaultdict(list)
         for server in self.servers:
             country_code = server.hostname.split('-')[0]
-            server_countries.setdefault(country_code, []).append(server)
-        
-        # Map countries to continents
-        available_continents = {}
-        for continent, countries in CONTINENT_MAPPING.items():
-            continent_servers = []
-            for country in countries:
-                if country in server_countries:
-                    continent_servers.extend(server_countries[country])
-            if continent_servers:
-                available_continents[continent] = continent_servers
+            continent = COUNTRY_TO_CONTINENT.get(country_code)
+            if continent:
+                available_continents[continent].append(server)
         
         # Determine user's continent
         self.user_continent = self._get_location_continent(self.reference_location)
@@ -526,10 +525,8 @@ class MullvadTester:
             filtered_servers = []
             for server in servers_list:
                 country_code = server.hostname.split('-')[0]
-                for continent, countries in CONTINENT_MAPPING.items():
-                    if continent != exclude_continent and country_code in countries:
-                        filtered_servers.append(server)
-                        break
+                if exclude_continent and COUNTRY_TO_CONTINENT.get(country_code) != exclude_continent:
+                    filtered_servers.append(server)
             servers_list = filtered_servers
         
         # If no servers after filtering, return empty list
