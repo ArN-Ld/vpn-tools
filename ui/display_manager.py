@@ -3,6 +3,7 @@ import shutil
 import subprocess
 import threading
 import time
+from itertools import cycle
 from typing import Optional
 
 # Try to import colorama for color support
@@ -203,8 +204,7 @@ def print_progress_bar(iteration: float, total: float, prefix: str = '',
 
 def run_with_spinner(message, action, timeout=None):
     """Display a spinner while running an action."""
-    spinner_chars = ['|', '/', '-', '\\']
-    spinner_idx = 0
+    spinner = cycle(['|', '/', '-', '\\'])
     stop_event = threading.Event()
     result = {'value': None, 'error': None}
 
@@ -231,8 +231,7 @@ def run_with_spinner(message, action, timeout=None):
                 time_info = f"({max(0, timeout - elapsed):.0f}s remaining)"
             else:
                 time_info = f"({elapsed:.1f}s)"
-            print(f"\r{message} {spinner_chars[spinner_idx]} {time_info} ", end='', flush=True)
-            spinner_idx = (spinner_idx + 1) % len(spinner_chars)
+            print(f"\r{message} {next(spinner)} {time_info} ", end='', flush=True)
             time.sleep(0.1)
     finally:
         thread.join()
