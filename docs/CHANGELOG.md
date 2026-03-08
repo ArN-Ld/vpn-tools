@@ -10,6 +10,7 @@ All notable changes to this project are documented in this file.
 - Added regression tests for non-interactive execution and geocode fallback.
 - Organized project structure with `src/vpn_tools/`, `docs/`, `tests/unit/` directories.
 - Created `runtime/` directory for all logs, database, and cache files.
+- Added Dependabot configuration (`.github/dependabot.yml`) for automated dependency updates.
 
 ### Changed
 - Fixed non-interactive behavior so command execution still runs without UI animation.

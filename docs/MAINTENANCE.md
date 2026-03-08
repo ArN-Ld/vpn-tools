@@ -37,3 +37,20 @@
 - All runtime artifacts are stored in the `runtime/` directory (logs, database, cache).
 - The `runtime/` directory is gitignored to keep the repository clean.
 - Sample output logs can be kept in docs for documentation purposes if needed.
+
+## Automated Dependency Updates
+
+Dependabot is configured in `.github/dependabot.yml` to automatically check for updates:
+- **Python packages** (requirements.txt, requirements-dev.txt): Checked weekly on Mondays
+- **GitHub Actions**: Checked weekly on Mondays
+
+When updates are available, Dependabot creates pull requests automatically with:
+- Labels: `dependencies`, `python` or `github-actions`
+- Commit prefix: `deps:` for Python, `ci:` for Actions
+- Assigned to: ArN-Ld for review
+
+### Reviewing Dependabot PRs
+1. Check the changelog/release notes of the updated package
+2. Verify CI passes (syntax check + tests)
+3. For major version updates, test manually if needed
+4. Merge when confident the update is safe
