@@ -15,6 +15,7 @@ All notable changes to this project are documented in this file.
 - Added fork-safe upstream review routine in `docs/MAINTENANCE.md` and helper script `scripts/upstream_review.sh`.
 - Added repository governance templates: `.github/CODEOWNERS`, issue templates, and PR template.
 - Added case-insensitive city-only location resolution using Mullvad coordinates database.
+- Added missing Mullvad city coordinates from the official server list (Buenos Aires, Fortaleza, Kansas City, Malmö).
 
 ### Changed
 - Fixed non-interactive behavior so command execution still runs without UI animation.
