@@ -54,3 +54,31 @@ When updates are available, Dependabot creates pull requests automatically with:
 2. Verify CI passes (syntax check + tests)
 3. For major version updates, test manually if needed
 4. Merge when confident the update is safe
+
+## Quarterly Upstream Review (Fork-Safe)
+
+Goal: stay aware of upstream fixes without forcing destructive merges into a diverged fork.
+
+### Frequency
+- Run once per quarter.
+- Run immediately for critical upstream security advisories.
+
+### Procedure
+1. Update references:
+  - `git fetch --all --prune`
+2. Measure divergence:
+  - `git rev-list --left-right --count HEAD...upstream/main`
+3. Inspect missing upstream commits:
+  - `git log --oneline HEAD..upstream/main`
+  - `git diff --name-only HEAD...upstream/main`
+4. Apply only relevant patches on a temporary branch:
+  - `git checkout -b upstream-review-YYYYQX`
+  - `git cherry-pick <commit_sha>` (security/bugfix only)
+5. Validate:
+  - `python3 -m py_compile src/vpn_tools/*.py src/vpn_tools/ui/*.py`
+  - `python3 -m pytest tests/ -q`
+6. Merge to `main` only if validation passes; otherwise drop the temp branch.
+
+### Helper Script
+- Use `scripts/upstream_review.sh` for a quick non-destructive review summary.
+- Example: `bash scripts/upstream_review.sh upstream main`

@@ -12,6 +12,7 @@ All notable changes to this project are documented in this file.
 - Created `runtime/` directory for all logs, database, and cache files.
 - Added Dependabot configuration (`.github/dependabot.yml`) for automated dependency updates.
 - Added security policy (`SECURITY.md`) with vulnerability reporting guidelines and security best practices.
+- Added fork-safe upstream review routine in `docs/MAINTENANCE.md` and helper script `scripts/upstream_review.sh`.
 
 ### Changed
 - Fixed non-interactive behavior so command execution still runs without UI animation.
