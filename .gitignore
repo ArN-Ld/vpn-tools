@@ -1,5 +1,11 @@
 # Logs
 *.log
+mullvad_test_results_*.log
+
+# Runtime artifacts
+*.db
+*.sqlite
+geocoords_cache.pkl
 
 # Python
 __pycache__/

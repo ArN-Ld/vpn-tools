@@ -269,8 +269,55 @@ class DisplayManager:
             self.header = noop
             self.connection_status = noop
             self.progress_bar = noop
-            self.spinner = noop
-            self.run_command_with_spinner = noop
+            # Keep execution methods active in non-interactive mode.
+            self.spinner = self._run_action_silently
+            self.run_command_with_spinner = self._run_command_silently
+
+    def _run_action_silently(self, message, action, timeout=None):
+        """Run an action without terminal animation in non-interactive mode."""
+        stop_event = threading.Event()
+        result = {'value': None, 'error': None}
+
+        def runner():
+            try:
+                result['value'] = action(stop_event)
+            except Exception as e:  # pragma: no cover - pass through errors
+                result['error'] = e
+
+        thread = threading.Thread(target=runner, daemon=True)
+        start_time = time.time()
+        thread.start()
+        thread.join(timeout=timeout)
+
+        timed_out = thread.is_alive()
+        if timed_out:
+            stop_event.set()
+            thread.join()
+
+        elapsed = time.time() - start_time
+        if result['error'] and not timed_out:
+            raise result['error']
+        return result.get('value'), timed_out, elapsed
+
+    def _run_command_silently(self, cmd, message, timeout=None):
+        """Run a subprocess command without spinner in non-interactive mode."""
+        start_time = time.time()
+        try:
+            completed = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=timeout,
+                check=False,
+            )
+            elapsed = time.time() - start_time
+            return completed.stdout, completed.stderr, completed.returncode, False, elapsed
+        except subprocess.TimeoutExpired as exc:
+            elapsed = time.time() - start_time
+            stdout = exc.stdout or ""
+            stderr = exc.stderr or ""
+            return stdout, stderr, 124, True, elapsed
 
     def success(self, message: str) -> None:
         print_success(message)

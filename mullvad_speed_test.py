@@ -184,7 +184,7 @@ def input_coordinates(ui):
 
 def print_welcome(ui):
     """Print a welcome message with ASCII art"""
-    title = """
+    title = r"""
  __  __         _ _               _  __     _______  _   _   _____         _
 |  \/  |       | | |             | | \ \   /  /  _ \| \ | | |_   _|       | |
 | \  / |_   _ _| | |_   ____ _  _| |  \ \_/  /| |_) |  \| |   | | ___  ___| |_ ___ _ __
@@ -205,7 +205,8 @@ class MullvadTester:
                  max_servers_hard_limit=MAX_SERVERS_HARD_LIMIT,
                  min_download_speed=MIN_DOWNLOAD_SPEED,
                  connection_timeout=DEFAULT_CONNECTION_TIME,
-                 min_viable_servers=MIN_VIABLE_SERVERS):
+                 min_viable_servers=MIN_VIABLE_SERVERS,
+                 open_results_prompt=True):
         
         # Set up logging and instance variables
         logger.setLevel(logging.INFO if verbose else logging.WARNING)
@@ -214,11 +215,12 @@ class MullvadTester:
         self.min_download_speed = min_download_speed
         self.default_connection_timeout = connection_timeout
         self.min_viable_servers = min_viable_servers
+        self.open_results_prompt = open_results_prompt
         self.db_file = db_file
         self.ui = DisplayManager(interactive)
         
         # Get reference location
-        if reference_location == DEFAULT_LOCATION:
+        if reference_location == DEFAULT_LOCATION and self.ui.interactive:
             reference_location = input_location(self.ui)
         
         self.reference_location = reference_location
@@ -369,6 +371,20 @@ class MullvadTester:
 
     def _handle_geocode_failure(self, location):
         """Fallback handling when geocoding fails"""
+        if self.default_coords is not None:
+            self.log_and_warning(
+                f"Using default coordinates for {location}: {self.default_coords}"
+            )
+            self.coords_cache[location] = self.default_coords
+            self._save_coords_cache()
+            return self.default_coords
+
+        if not self.ui.interactive:
+            raise ValueError(
+                "Unable to geocode location in non-interactive mode. "
+                "Provide --default-lat and --default-lon."
+            )
+
         return self._manual_coordinates_flow(location)
 
     def _manual_coordinates_flow(self, location):
@@ -1099,18 +1115,19 @@ class MullvadTester:
                 )
             self.ui.info(f"Detailed results saved in: {results_file}")
 
-            print("\nWould you like to open the results file?")
-            choice = input("Open file? (y/n): ").strip().lower()
-            if choice.startswith('y'):
-                try:
-                    if sys.platform == 'darwin':
-                        subprocess.call(('open', results_file))
-                    elif sys.platform == 'win32':
-                        os.startfile(results_file)
-                    else:
-                        subprocess.call(('xdg-open', results_file))
-                except Exception as e:
-                    self.ui.error(f"Unable to open file: {e}")
+            if self.ui.interactive and self.open_results_prompt:
+                print("\nWould you like to open the results file?")
+                choice = input("Open file? (y/n): ").strip().lower()
+                if choice.startswith('y'):
+                    try:
+                        if sys.platform == 'darwin':
+                            subprocess.call(('open', results_file))
+                        elif sys.platform == 'win32':
+                            os.startfile(results_file)
+                        else:
+                            subprocess.call(('xdg-open', results_file))
+                    except Exception as e:
+                        self.ui.error(f"Unable to open file: {e}")
         else:
             self.log_and_error("No test results available to generate a summary.")
 
@@ -1466,6 +1483,10 @@ def main():
                       help=f'Default connection timeout in seconds (default: {DEFAULT_CONNECTION_TIME})')
     parser.add_argument('--min-viable-servers', type=int, default=MIN_VIABLE_SERVERS,
                       help=f'Minimum number of viable servers required (default: {MIN_VIABLE_SERVERS})')
+    parser.add_argument('--countdown-seconds', type=int, default=5,
+                      help='Interactive countdown before tests start (default: 5)')
+    parser.add_argument('--no-open-results', action='store_false', dest='open_results',
+                      help='Do not prompt to open results file at the end')
 
     # Default to interactive mode if no args are provided
     parser.set_defaults(interactive=len(sys.argv) <= 1)
@@ -1500,17 +1521,17 @@ def main():
         print("")
 
     # Customize parameters in interactive mode
-    args = input_custom_parameters(args, ui)
-
-    # Display parameter summary
-    display_parameters_summary(args, ui, countdown_seconds=5)
+    if args.interactive:
+        args = input_custom_parameters(args, ui)
+        display_parameters_summary(args, ui, countdown_seconds=max(0, args.countdown_seconds))
 
     # Create tester and run tests
     tester = MullvadTester(
         reference_location=args.location, default_lat=args.default_lat, default_lon=args.default_lon,
         verbose=args.verbose, db_file=args.db, interactive=args.interactive,
         max_servers_hard_limit=args.max_servers_hard_limit, min_download_speed=args.min_download_speed,
-        connection_timeout=args.connection_timeout, min_viable_servers=args.min_viable_servers
+        connection_timeout=args.connection_timeout, min_viable_servers=args.min_viable_servers,
+        open_results_prompt=args.open_results
     )
     tester.run_tests(protocol=args.protocol, max_servers=args.max_servers, max_distance=args.max_distance)
 

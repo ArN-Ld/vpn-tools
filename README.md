@@ -4,7 +4,7 @@ A collection of Python-based tools for testing, optimizing, and managing VPN con
 
 ## Available Tools
 
-### Mullvad Speed Test (`mullvad-speedtest.py`)
+### Mullvad Speed Test (`mullvad_speed_test.py`)
 
 A comprehensive tool for testing and comparing Mullvad VPN server performance. This tool helps you find the best performing Mullvad servers based on various metrics including download speed, upload speed, latency, and reliability.
 
@@ -63,11 +63,11 @@ A comprehensive tool for testing and comparing Mullvad VPN server performance. T
 
 2. Install Python dependencies:
    ```bash
-   # Option 1: Install required packages directly
-   pip install geopy speedtest-cli colorama
-
-   # Option 2: Install from requirements.txt
+   # Runtime dependencies
    pip install -r requirements.txt
+
+   # Development dependencies (optional)
+   pip install -r requirements-dev.txt
    ```
 
    Note: The script includes fallback handling if colorama is not installed, but the user experience will be enhanced with this package.
@@ -80,14 +80,14 @@ A comprehensive tool for testing and comparing Mullvad VPN server performance. T
 
 Basic usage:
 ```bash
-sudo python mullvad-speedtest.py
+sudo python mullvad_speed_test.py
 ```
 
 This will run in interactive mode, guiding you through the process.
 
 Advanced usage with options:
 ```bash
-sudo python mullvad-speedtest.py --location "Paris, France" --protocol WireGuard --max-servers 20
+sudo python mullvad_speed_test.py --location "Paris, France" --protocol WireGuard --max-servers 20
 ```
 
 ## Command-line Arguments
@@ -104,6 +104,8 @@ sudo python mullvad-speedtest.py --location "Paris, France" --protocol WireGuard
 | `--min-download-speed` | Minimum download speed in Mbps for viable servers | 3.0 |
 | `--connection-timeout` | Default connection timeout in seconds | 20.0 |
 | `--min-viable-servers` | Minimum number of viable servers required | 8 |
+| `--countdown-seconds` | Interactive countdown before tests start | 5 |
+| `--no-open-results` | Disable end-of-run prompt to open results file | Disabled |
 | `--interactive` | Enable interactive mode | Auto-detected |
 | `--non-interactive` | Disable interactive mode | - |
 | `--verbose` | Enable verbose logging | Disabled |
@@ -113,28 +115,43 @@ sudo python mullvad-speedtest.py --location "Paris, France" --protocol WireGuard
 
 ### Find Best Servers Near Your Location
 ```bash
-sudo python mullvad-speedtest.py --interactive
+sudo python mullvad_speed_test.py --interactive
 ```
 
 ### Test Servers Near a Specific Location
 ```bash
-sudo python mullvad-speedtest.py --location "Tokyo, Japan" --max-servers 15
+sudo python mullvad_speed_test.py --location "Tokyo, Japan" --max-servers 15
 ```
 
 ### Testing Within a Specific Distance Range
 ```bash
-sudo python mullvad-speedtest.py --location "Berlin, Germany" --max-distance 2000
+sudo python mullvad_speed_test.py --location "Berlin, Germany" --max-distance 2000
 ```
 
 ### Testing with OpenVPN Protocol
 ```bash
-sudo python mullvad-speedtest.py --protocol OpenVPN --max-servers 10
+sudo python mullvad_speed_test.py --protocol OpenVPN --max-servers 10
 ```
 
 ### Testing with Custom Performance Criteria
 ```bash
-sudo python mullvad-speedtest.py --min-download-speed 5.0 --min-viable-servers 10
+sudo python mullvad_speed_test.py --min-download-speed 5.0 --min-viable-servers 10
 ```
+
+### Non-interactive automation example
+```bash
+sudo python mullvad_speed_test.py --non-interactive --location "Paris, France" --default-lat 48.8566 --default-lon 2.3522 --no-open-results
+```
+
+## Development and CI
+
+Run local checks:
+```bash
+python -m py_compile mullvad_speed_test.py mullvad_coordinates.py ui/display_manager.py
+pytest -q
+```
+
+GitHub Actions CI (`.github/workflows/ci.yml`) runs the same checks on push and pull requests.
 
 ## Supporting Modules
 
@@ -218,6 +235,16 @@ Contributions are welcome! If you have ideas for new VPN tools or improvements t
 1. Fork the repository
 2. Create a feature branch
 3. Submit a pull request
+
+Before opening a pull request:
+- Update `CHANGELOG.md` under `Unreleased`
+- Run the checks listed in `MAINTENANCE.md`
+
+## Project Maintenance
+
+- Change history: `CHANGELOG.md`
+- Maintenance process: `MAINTENANCE.md`
+- Technical audit and roadmap: `PROJECT_AUDIT.md`
 
 ## License
 

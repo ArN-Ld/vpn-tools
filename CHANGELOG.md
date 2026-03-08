@@ -1,0 +1,47 @@
+# Changelog
+
+All notable changes to this project are documented in this file.
+
+## [Unreleased]
+### Added
+- Added `requirements-dev.txt` to separate development dependencies from runtime dependencies.
+- Added `MAINTENANCE.md` and `PROJECT_AUDIT.md` to formalize maintenance and technical review.
+- Added GitHub Actions CI workflow in `.github/workflows/ci.yml`.
+- Added regression tests for non-interactive execution and geocode fallback.
+
+### Changed
+- Fixed non-interactive behavior so command execution still runs without UI animation.
+- Disabled interactive prompts in non-interactive mode.
+- Added a deterministic geocoding fallback path using `--default-lat` and `--default-lon`.
+- Updated `README.md` examples to use `mullvad_speed_test.py` consistently.
+- Reduced `requirements.txt` to runtime dependencies only.
+- Added automation flags: `--countdown-seconds` and `--no-open-results`.
+
+### Fixed
+- Fixed a regression where non-interactive mode could skip command execution (`spinner` and command wrapper were no-op).
+- Fixed automation flow to avoid blocking prompts after CLI parsing.
+
+## [2025-09-14]
+### Added
+- Added `ui/display_manager.py` and migrated terminal UI helpers into a dedicated module.
+- Added server coordinate files `coordinates.json` and `coordinates.example.json`.
+- Added continent lookup optimizations and consolidated logging helpers.
+
+### Changed
+- Major refactor of `mullvad_speed_test.py` with modularized helpers and improved server-selection logic.
+- Improved spinner/progress behavior and formatting of server output.
+- Updated geolocation and coordinate-cache handling.
+- Introduced multiple UI/typing/refactoring improvements via PRs #2 to #32.
+
+### Fixed
+- Fixed coordinate loading error handling in `mullvad_coordinates.py`.
+- Reverted and reworked server hostname/icon formatting changes for display stability.
+
+## [2025-04-11]
+### Changed
+- Added RANDOM setting and fixed a deprecation warning in upstream branch history.
+
+## [2025-03-05]
+### Added
+- Initial repository setup and first Mullvad tester implementation.
+- Added base modules: `mullvad_speed_test.py`, `mullvad_coordinates.py`, `README.md`, and `requirements.txt`.
