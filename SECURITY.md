@@ -101,4 +101,4 @@ We appreciate the security research community and will acknowledge contributors 
 
 ---
 
-**Note**: This project is a fork of [TrueMan777/vpn-tools](https://github.com/TrueMan777/vpn-tools). Security issues in the upstream project should be reported to the original maintainer.
+**Note**: This project is a fork of [valtumi/vpn-tools](https://github.com/valtumi/vpn-tools). Security issues in the upstream project should be reported to the original maintainer.
