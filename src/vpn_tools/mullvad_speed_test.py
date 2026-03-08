@@ -21,9 +21,10 @@ from .ui.display_manager import (
 )
 
 try:
-    from .mullvad_coordinates import get_coordinates
+    from .mullvad_coordinates import get_coordinates, resolve_location_input
 except ImportError:
     get_coordinates = None
+    resolve_location_input = None
 
 # Constants
 DEFAULT_MAX_SERVERS, MAX_SERVERS_HARD_LIMIT = 15, 45
@@ -151,16 +152,13 @@ def load_geo_modules(ui):
 def input_location(ui):
     """Interactive function to input location"""
     ui.header("LOCATION FOR MULLVAD VPN TESTS")
-    ui.info("Please enter your location in the format 'City, Country'")
-    print("Example: 'Paris, France' or 'Beijing, China'")
+    ui.info("Enter your origin city (or 'City, Country').")
+    print("Examples: 'Paris' or 'Paris, France'")
 
     while True:
         location = input("\nYour location: ").strip()
         if location:
-            if ',' in location and len(location.split(',')) >= 2:
-                return location
-            else:
-                ui.warning("Incorrect format. Please use the format 'City, Country'")
+            return location
         else:
             ui.info(f"Using default location: {DEFAULT_LOCATION}")
             return DEFAULT_LOCATION
@@ -338,13 +336,31 @@ class MullvadTester:
 
     def _get_location_coordinates(self):
         """Get coordinates for reference location"""
-        location = self.reference_location
+        location = self.reference_location.strip()
 
-        # Check cache first
-        if location in self.coords_cache:
-            coords = self.coords_cache[location]
-            self.log_and_info(f"Using cached coordinates for {location}: {coords}")
-            return coords
+        # Check cache first (case-insensitive).
+        for cached_location, coords in self.coords_cache.items():
+            if cached_location.lower() == location.lower():
+                self.reference_location = cached_location
+                self.log_and_info(f"Using cached coordinates for {cached_location}: {coords}")
+                return coords
+
+        # Try to resolve against known Mullvad city coordinates before geocoding.
+        if resolve_location_input is not None:
+            canonical_location, coords, matches = resolve_location_input(location)
+            if coords is not None and canonical_location is not None:
+                self.reference_location = canonical_location
+                self.coords_cache[canonical_location] = coords
+                self._save_coords_cache()
+
+                if len(matches) > 1:
+                    self.log_and_warning(
+                        f"Multiple city matches for '{location}', using '{canonical_location}'."
+                    )
+
+                self.ui.success(f"Using Mullvad city coordinates for: {canonical_location}")
+                self.ui.success(f"Coordinates: ({coords[0]:.4f}, {coords[1]:.4f})")
+                return coords
 
         # Load geopy modules
         _, Nominatim, _ = load_geo_modules(self.ui)

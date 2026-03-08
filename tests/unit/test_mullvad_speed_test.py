@@ -7,6 +7,18 @@ class DummyUI:
     def __init__(self, interactive):
         self.interactive = interactive
 
+    def info(self, _msg):
+        pass
+
+    def success(self, _msg):
+        pass
+
+    def warning(self, _msg):
+        pass
+
+    def error(self, _msg):
+        pass
+
 
 def test_handle_geocode_failure_uses_default_coords():
     tester = mst.MullvadTester.__new__(mst.MullvadTester)
@@ -86,3 +98,31 @@ def test_main_non_interactive_skips_interactive_helpers(monkeypatch):
     assert called["custom"] is False
     assert called["summary"] is False
     assert called["run_tests"] is True
+
+
+def test_get_location_coordinates_uses_local_city_lookup(monkeypatch):
+    tester = mst.MullvadTester.__new__(mst.MullvadTester)
+    tester.reference_location = "pArIs"
+    tester.default_coords = None
+    tester.coords_cache = {}
+    tester.ui = DummyUI(interactive=False)
+    tester._save_coords_cache = lambda: None
+    tester.log_and_info = lambda _msg: None
+    tester.log_and_warning = lambda _msg: None
+
+    monkeypatch.setattr(
+        mst,
+        "resolve_location_input",
+        lambda _loc: ("Paris, France", (48.8566, 2.3522), ["Paris, France"]),
+    )
+
+    def _unexpected_geopy(_ui):
+        raise AssertionError("geopy should not be called when local city lookup matches")
+
+    monkeypatch.setattr(mst, "load_geo_modules", _unexpected_geopy)
+
+    coords = mst.MullvadTester._get_location_coordinates(tester)
+
+    assert coords == (48.8566, 2.3522)
+    assert tester.reference_location == "Paris, France"
+    assert tester.coords_cache["Paris, France"] == (48.8566, 2.3522)
