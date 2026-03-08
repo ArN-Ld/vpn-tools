@@ -2,7 +2,7 @@
 
 A collection of Python-based tools for testing, optimizing, and managing VPN connections. This repository contains utilities designed to help users get the most out of their VPN services.
 
-> **Note**: This is an enhanced fork of [TrueMan777/vpn-tools](https://github.com/TrueMan777/vpn-tools) with improvements including modular project structure, comprehensive testing, CI/CD integration, and enhanced automation capabilities.
+> **Note**: This is an enhanced fork of [valtumi/vpn-tools](https://github.com/valtumi/vpn-tools) with improvements including modular project structure, comprehensive testing, CI/CD integration, and enhanced automation capabilities.
 
 ## Available Tools
 
@@ -281,7 +281,7 @@ Before opening a pull request:
 
 ## Credits
 
-This project is derived from [vpn-tools](https://github.com/TrueMan777/vpn-tools) by [TrueMan777](https://github.com/TrueMan777) (Valera).
+This project is derived from [vpn-tools](https://github.com/valtumi/vpn-tools) by [valtumi](https://github.com/valtumi) (Valera).
 
 Original work Copyright © 2025 Valera
 
