@@ -97,7 +97,7 @@ def display_parameters_summary(args, ui, countdown_seconds=5):
     ui.header("SUMMARY OF MULLVAD VPN TEST PARAMETERS")
     params = [
         f"Location: {args.location}",
-        f"Protocol: {args.protocol}",
+        "Protocol: WireGuard",
         f"Max number of servers: {args.max_servers}",
         f"Min. download speed: {args.min_download_speed} Mbps",
         f"Connection timeout: {args.connection_timeout} seconds",
@@ -945,16 +945,17 @@ class MullvadTester:
             logger.error(f"Error saving results to database: {e}")
             return False
 
-    def _prepare_session(self, protocol, max_servers, max_distance):
+    def _prepare_session(self, max_servers, max_distance):
         """Prepare testing session and return session data"""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        results_file = RUNTIME_DIR / f"mullvad_test_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{protocol.lower()}.log"
+        protocol = "WireGuard"
+        results_file = RUNTIME_DIR / f"mullvad_test_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}_wireguard.log"
         if max_servers is None:
             max_servers = DEFAULT_MAX_SERVERS
 
         self.successful_servers = 0
 
-        protocol_servers = [s for s in self.servers if protocol.lower() in s.protocol.lower()]
+        protocol_servers = [s for s in self.servers if s.hostname.split('-')[2] == 'wg']
         if not protocol_servers:
             self.log_and_error(f"No servers found for protocol {protocol}")
             return None
@@ -1156,9 +1157,9 @@ class MullvadTester:
         else:
             self.log_and_error("No test results available to generate a summary.")
 
-    def run_tests(self, protocol="WireGuard", max_servers=None, max_distance=None):
+    def run_tests(self, max_servers=None, max_distance=None):
         """Run tests on servers"""
-        session = self._prepare_session(protocol, max_servers, max_distance)
+        session = self._prepare_session(max_servers, max_distance)
         if not session:
             return
 
@@ -1478,9 +1479,6 @@ def main():
     # Basic options
     parser.add_argument('--location', type=str, default=DEFAULT_LOCATION,
                       help=f'Reference location for distance calculation (default: {DEFAULT_LOCATION})')
-    parser.add_argument('--protocol', type=str, default="WireGuard",
-                      choices=['WireGuard', 'OpenVPN'],
-                      help='VPN protocol to test (default: WireGuard)')
     parser.add_argument('--max-servers', type=int, default=DEFAULT_MAX_SERVERS,
                       help=f'Maximum number of servers to test (default: {DEFAULT_MAX_SERVERS})')
     
@@ -1567,7 +1565,7 @@ def main():
         connection_timeout=args.connection_timeout, min_viable_servers=args.min_viable_servers,
         open_results_prompt=args.open_results
     )
-    tester.run_tests(protocol=args.protocol, max_servers=args.max_servers, max_distance=args.max_distance)
+    tester.run_tests(max_servers=args.max_servers, max_distance=args.max_distance)
 
 if __name__ == "__main__":
     main()

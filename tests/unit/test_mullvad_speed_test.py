@@ -55,9 +55,8 @@ def test_main_non_interactive_skips_interactive_helpers(monkeypatch):
         def __init__(self, *args, **kwargs):
             self.kwargs = kwargs
 
-        def run_tests(self, protocol, max_servers, max_distance):
+        def run_tests(self, max_servers, max_distance):
             called["run_tests"] = True
-            assert protocol == "WireGuard"
             assert max_servers == 1
             assert max_distance is None
 

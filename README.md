@@ -33,7 +33,7 @@ A comprehensive tool for testing and comparing Mullvad VPN server performance. T
 - Optimized server selection algorithm
 - Enhanced visual feedback with multi-level color gradient progress bars
 - Detailed breakdowns of selected servers by country
-- Supports both WireGuard and OpenVPN protocols
+- Uses Mullvad WireGuard relays
 - Detailed logging for troubleshooting
 - Stores test results in SQLite database for historical analysis
 
@@ -93,7 +93,7 @@ This will run in interactive mode, guiding you through the process.
 
 Advanced usage with options:
 ```bash
-sudo python mullvad_speed_test.py --location "Paris, France" --protocol WireGuard --max-servers 20
+sudo python mullvad_speed_test.py --location "Paris, France" --max-servers 20
 ```
 
 ## Command-line Arguments
@@ -101,7 +101,6 @@ sudo python mullvad_speed_test.py --location "Paris, France" --protocol WireGuar
 | Argument | Description | Default |
 |----------|-------------|---------|
 | `--location` | Reference location (city only or "City, Country", case-insensitive) | "Beijing, Beijing, China" |
-| `--protocol` | VPN protocol to test ("WireGuard" or "OpenVPN") | "WireGuard" |
 | `--max-servers` | Maximum number of servers to test | 15 |
 | `--max-servers-hard-limit` | Hard limit on number of servers to test | 45 |
 | `--max-distance` | Maximum distance (km) for server selection | No limit |
@@ -134,10 +133,6 @@ sudo python mullvad_speed_test.py --location "Tokyo, Japan" --max-servers 15
 sudo python mullvad_speed_test.py --location "Berlin, Germany" --max-distance 2000
 ```
 
-### Testing with OpenVPN Protocol
-```bash
-sudo python mullvad_speed_test.py --protocol OpenVPN --max-servers 10
-```
 
 ### Testing with Custom Performance Criteria
 ```bash
@@ -194,7 +189,7 @@ A helper module that loads accurate geographical coordinates for Mullvad server 
 
 After running the tests, the script generates a detailed report in a log file with the following sections:
 
-1. **Test Parameters**: Your location, test date, protocol used, etc.
+1. **Test Parameters**: Your location, test date, WireGuard protocol, etc.
 2. **Individual Server Results**: Detailed performance metrics for each tested server
 3. **Summary Section**: 
    - Top 5 servers by distance
