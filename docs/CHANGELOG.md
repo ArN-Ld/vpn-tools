@@ -18,6 +18,8 @@ All notable changes to this project are documented in this file.
 - Added missing Mullvad city coordinates from the official server list (Buenos Aires, Fortaleza, Kansas City, Malmö).
 
 ### Changed
+- Removed OpenVPN mode and simplified speed tests to WireGuard-only flow (Mullvad removed OpenVPN relays in January 2026).
+- Removed CLI protocol selection (`--protocol`) and related branching logic.
 - Fixed non-interactive behavior so command execution still runs without UI animation.
 - Disabled interactive prompts in non-interactive mode.
 - Added a deterministic geocoding fallback path using `--default-lat` and `--default-lon`.

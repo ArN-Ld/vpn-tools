@@ -10,6 +10,8 @@ A collection of Python-based tools for testing, optimizing, and managing VPN con
 
 A comprehensive tool for testing and comparing Mullvad VPN server performance. This tool helps you find the best performing Mullvad servers based on various metrics including download speed, upload speed, latency, and reliability.
 
+Note: Mullvad removed OpenVPN from its relay fleet in January 2026. This tool now targets WireGuard relays only.
+
 #### Features
 - Interactive user interface with color-coded outputs
 - Geographic-based server analysis and distance calculations
