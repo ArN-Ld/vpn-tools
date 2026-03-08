@@ -7,7 +7,7 @@ Deep analysis of architecture, automation reliability, and maintainability for:
 - `mullvad_coordinates.py`
 - project docs and dependency files
 
-## Correctifs Applied
+## Fixes Applied
 1. Non-interactive execution reliability:
 - `DisplayManager` now keeps execution methods active in non-interactive mode.
 - Spinner/command wrappers no longer turn into no-op execution paths.
@@ -50,7 +50,7 @@ Deep analysis of architecture, automation reliability, and maintainability for:
 6. CI/CD baseline:
 - add CI workflow for `py_compile`, lint, and tests on pull requests.
 
-## Recommended Next Correctifs
+## Recommended Next Fixes
 1. Extend `tests/` coverage to include command parsing edge-cases and server selection invariants.
 
 2. Introduce a structured config file (`.toml`) for default thresholds and scoring weights.
