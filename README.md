@@ -100,7 +100,7 @@ sudo python mullvad_speed_test.py --location "Paris, France" --protocol WireGuar
 
 | Argument | Description | Default |
 |----------|-------------|---------|
-| `--location` | Reference location (format: "City, Country") | "Beijing, Beijing, China" |
+| `--location` | Reference location (city only or "City, Country", case-insensitive) | "Beijing, Beijing, China" |
 | `--protocol` | VPN protocol to test ("WireGuard" or "OpenVPN") | "WireGuard" |
 | `--max-servers` | Maximum number of servers to test | 15 |
 | `--max-servers-hard-limit` | Hard limit on number of servers to test | 45 |
