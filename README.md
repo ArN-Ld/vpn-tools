@@ -2,6 +2,8 @@
 
 A collection of Python-based tools for testing, optimizing, and managing VPN connections. This repository contains utilities designed to help users get the most out of their VPN services.
 
+> **Note**: This is an enhanced fork of [TrueMan777/vpn-tools](https://github.com/TrueMan777/vpn-tools) with improvements including modular project structure, comprehensive testing, CI/CD integration, and enhanced automation capabilities.
+
 ## Available Tools
 
 ### Mullvad Speed Test (`mullvad_speed_test.py`)
@@ -37,15 +39,19 @@ A comprehensive tool for testing and comparing Mullvad VPN server performance. T
 
 ## Prerequisites
 
-- Python 3.6+ (3.12+ recommended)
-- Mullvad VPN client with CLI access
-- speedtest-cli
-- mtr (My TraceRoute)
-- geopy (for geographical calculations)
+### System Requirements
 
-## Recommended Dependencies
+- **Python**: 3.9+ (tested with Python 3.9.6)
+- **Mullvad VPN**: Client with CLI access ([download](https://mullvad.net/download))
+- **System packages**:
+  - `mtr` (My TraceRoute) - for network path analysis
+  - `sudo` privileges - required for MTR execution
 
-- colorama (for color-coded terminal output)
+### Python Dependencies
+
+- `speedtest-cli>=2.1.3` - Network speed testing
+- `geopy>=2.4.1` - Geographical calculations and distance computation
+- `colorama>=0.4.6` - Color-coded terminal output (optional but recommended)
 
 ## Installation
 
@@ -145,13 +151,39 @@ sudo python mullvad_speed_test.py --non-interactive --location "Paris, France" -
 
 ## Development and CI
 
-Run local checks:
+### Running Tests Locally
+
+Run syntax checks and tests:
 ```bash
-python -m py_compile mullvad_speed_test.py mullvad_coordinates.py ui/display_manager.py
+# Syntax validation
+python -m py_compile src/vpn_tools/*.py src/vpn_tools/ui/*.py
+
+# Run test suite
 pytest -q
+
+# Run with verbose output
+pytest -v
 ```
 
-GitHub Actions CI (`.github/workflows/ci.yml`) runs the same checks on push and pull requests.
+### Code Quality
+
+The project uses:
+- **pytest** for testing
+- **black** for code formatting
+- **flake8** for linting
+- **mypy** for type checking
+
+Install development dependencies:
+```bash
+pip install -r requirements-dev.txt
+```
+
+### Continuous Integration
+
+GitHub Actions CI (`.github/workflows/ci.yml`) automatically runs on push and pull requests:
+- Python syntax validation
+- Full test suite execution
+- Tested with Python 3.12 on Ubuntu
 
 ## Supporting Modules
 
@@ -243,10 +275,27 @@ Before opening a pull request:
 
 ## Project Maintenance
 
-- Change history: `docs/CHANGELOG.md`
-- Maintenance process: `docs/MAINTENANCE.md`
-- Technical audit and roadmap: `docs/PROJECT_AUDIT.md`
+- Change history: [docs/CHANGELOG.md](docs/CHANGELOG.md)
+- Maintenance process: [docs/MAINTENANCE.md](docs/MAINTENANCE.md)
+- Technical audit and roadmap: [docs/PROJECT_AUDIT.md](docs/PROJECT_AUDIT.md)
+
+## Credits
+
+This project is derived from [vpn-tools](https://github.com/TrueMan777/vpn-tools) by [TrueMan777](https://github.com/TrueMan777) (Valera).
+
+Original work Copyright © 2025 Valera
+
+Enhancements and modifications in this fork:
+- Modular project structure with `src/`, `docs/`, `tests/` organization
+- Comprehensive test suite with pytest
+- GitHub Actions CI/CD pipeline
+- Enhanced non-interactive mode for automation
+- Runtime artifacts organization
+- Improved error handling and fallback mechanisms
+- Extended documentation and maintenance workflows
 
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+Original work Copyright © 2025 Valera
