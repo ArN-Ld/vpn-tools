@@ -146,6 +146,8 @@ def load_geo_modules():
         return geodesic, Nominatim, GeocoderTimedOut
     except ImportError:
         logger.error("geopy modules not found. Please install with: pip install geopy")
+        print("\nERROR: Required geopy modules not found.", file=sys.stderr)
+        print("Please install with: pip install geopy\n", file=sys.stderr)
         sys.exit(1)
 
 def input_location(ui):
