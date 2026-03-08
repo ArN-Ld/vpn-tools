@@ -258,9 +258,12 @@ The tools generate detailed logs and data files in the `runtime/` directory:
 
 ## Security Notes
 
-- The tool requires sudo privileges for MTR tests
-- No sensitive data (like API keys or credentials) is stored
-- All logs are stored locally and can be safely deleted
+- **Privilege requirements**: The tool requires sudo privileges for MTR tests
+- **Data privacy**: No sensitive data (like API keys or credentials) is stored
+- **Local storage**: All logs and results are stored locally in the `runtime/` directory
+- **Vulnerability reporting**: See [SECURITY.md](SECURITY.md) for security policy and how to report issues
+
+For complete security guidelines, please review our [Security Policy](SECURITY.md).
 
 ## Contributing
 
