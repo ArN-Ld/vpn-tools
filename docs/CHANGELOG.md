@@ -24,10 +24,13 @@ All notable changes to this project are documented in this file.
 - Reorganized project from flat structure to modular package layout.
 - Moved all runtime artifacts (logs, DB, cache) to `runtime/` directory to keep root clean.
 - Updated paths in code and documentation to reflect new structure.
+- Updated CI actions to `actions/checkout@v6` and `actions/setup-python@v6`.
 
 ### Fixed
 - Fixed a regression where non-interactive mode could skip command execution (`spinner` and command wrapper were no-op).
 - Fixed automation flow to avoid blocking prompts after CLI parsing.
+- Added explicit least-privilege workflow permissions in `.github/workflows/ci.yml` (`contents: read`).
+- Removed plaintext logging of precise reference location and coordinates in `src/vpn_tools/mullvad_speed_test.py`.
 
 ## [2025-09-14]
 ### Added

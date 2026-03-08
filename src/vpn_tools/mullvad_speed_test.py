@@ -248,7 +248,7 @@ class MullvadTester:
             sys.exit(1)
             
         logger.info(f"Found {len(self.servers)} Mullvad servers")
-        logger.info(f"Reference location: {reference_location} ({self.reference_coords})")
+        logger.info("Reference location resolved successfully")
         
         self.ui.success(f"Mullvad servers found: {len(self.servers)}")
         self.ui.info(f"Reference location: {reference_location}")
@@ -363,7 +363,7 @@ class MullvadTester:
             coords = (location_data.latitude, location_data.longitude)
             self.ui.success(f"Location found: {location_data.address}")
             self.ui.success(f"Coordinates: {coords}")
-            logger.info(f"Found coordinates for {location}: {coords}")
+            logger.info("Geocoding completed successfully")
             self.coords_cache[location] = coords
             self._save_coords_cache()
             return coords
