@@ -55,6 +55,24 @@ When updates are available, Dependabot creates pull requests automatically with:
 3. For major version updates, test manually if needed
 4. Merge when confident the update is safe
 
+## Repository Governance Baseline
+
+The repository should keep the following settings enabled:
+- Branch protection on `main` with required checks (`test`, `Analyze (python)`, `Analyze (actions)`)
+- Required pull request review (minimum 1 approval)
+- Required conversation resolution
+- Enforce admins
+- Required signed commits on `main`
+- Auto-delete branches on merge
+- Auto-merge enabled
+
+Repository contribution scaffolding:
+- `.github/CODEOWNERS`
+- `.github/ISSUE_TEMPLATE/bug_report.yml`
+- `.github/ISSUE_TEMPLATE/feature_request.yml`
+- `.github/ISSUE_TEMPLATE/config.yml`
+- `.github/pull_request_template.md`
+
 ## Quarterly Upstream Review (Fork-Safe)
 
 Goal: stay aware of upstream fixes without forcing destructive merges into a diverged fork.

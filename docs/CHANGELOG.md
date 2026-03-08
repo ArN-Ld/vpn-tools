@@ -13,6 +13,7 @@ All notable changes to this project are documented in this file.
 - Added Dependabot configuration (`.github/dependabot.yml`) for automated dependency updates.
 - Added security policy (`SECURITY.md`) with vulnerability reporting guidelines and security best practices.
 - Added fork-safe upstream review routine in `docs/MAINTENANCE.md` and helper script `scripts/upstream_review.sh`.
+- Added repository governance templates: `.github/CODEOWNERS`, issue templates, and PR template.
 
 ### Changed
 - Fixed non-interactive behavior so command execution still runs without UI animation.
@@ -25,12 +26,14 @@ All notable changes to this project are documented in this file.
 - Moved all runtime artifacts (logs, DB, cache) to `runtime/` directory to keep root clean.
 - Updated paths in code and documentation to reflect new structure.
 - Updated CI actions to `actions/checkout@v6` and `actions/setup-python@v6`.
+- Enabled GitHub Issues and auto-merge support in repository settings.
 
 ### Fixed
 - Fixed a regression where non-interactive mode could skip command execution (`spinner` and command wrapper were no-op).
 - Fixed automation flow to avoid blocking prompts after CLI parsing.
 - Added explicit least-privilege workflow permissions in `.github/workflows/ci.yml` (`contents: read`).
 - Removed plaintext logging of precise reference location and coordinates in `src/vpn_tools/mullvad_speed_test.py`.
+- Enabled required signed commits on protected `main` branch.
 
 ## [2025-09-14]
 ### Added
