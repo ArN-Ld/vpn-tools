@@ -1,6 +1,6 @@
 import pytest
 
-import mullvad_speed_test as mst
+import vpn_tools.mullvad_speed_test as mst
 
 
 class DummyUI:

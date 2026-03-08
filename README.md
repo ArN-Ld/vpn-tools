@@ -109,7 +109,7 @@ sudo python mullvad_speed_test.py --location "Paris, France" --protocol WireGuar
 | `--interactive` | Enable interactive mode | Auto-detected |
 | `--non-interactive` | Disable interactive mode | - |
 | `--verbose` | Enable verbose logging | Disabled |
-| `--db` | SQLite database file path | "mullvad_results.db" |
+| `--db` | SQLite database file path | "runtime/mullvad_results.db" |
 
 ## Example Use Cases
 
@@ -155,8 +155,8 @@ GitHub Actions CI (`.github/workflows/ci.yml`) runs the same checks on push and 
 
 ## Supporting Modules
 
-### Mullvad Coordinates (`mullvad_coordinates.py`)
-A helper module that loads accurate geographical coordinates for Mullvad server locations from `coordinates.json`. The data is cached in memory at import time for fast lookups. If the main JSON file is missing, the module falls back to `coordinates.example.json` or an empty dataset. These coordinates are used by the speed test tool for precise distance calculations.
+### Mullvad Coordinates (`src/vpn_tools/mullvad_coordinates.py`)
+A helper module that loads accurate geographical coordinates for Mullvad server locations from `src/vpn_tools/data/coordinates.json`. The data is cached in memory at import time for fast lookups. If the main JSON file is missing, the module falls back to `src/vpn_tools/data/coordinates.example.json` or an empty dataset. These coordinates are used by the speed test tool for precise distance calculations.
 
 ## Understanding Results
 
@@ -212,10 +212,11 @@ If your location cannot be determined automatically:
 
 ## Logging
 
-The tools generate detailed logs that can be found in:
-- `mullvad_speed_test.log` - Detailed operation logs
-- `mullvad_test_results_*.log` - Test results and summaries
-- SQLite database (`mullvad_results.db` by default) - Structured storage of all test results
+The tools generate detailed logs and data files in the `runtime/` directory:
+- `runtime/mullvad_speed_test.log` - Detailed operation logs
+- `runtime/mullvad_test_results_*.log` - Test results and summaries
+- `runtime/mullvad_results.db` - SQLite database with structured storage of all test results
+- `runtime/geocoords_cache.pkl` - Cached geocoding results
 
 ## Future Tools (Planned)
 - VPN connection monitor and auto-reconnect utility
@@ -242,9 +243,9 @@ Before opening a pull request:
 
 ## Project Maintenance
 
-- Change history: `CHANGELOG.md`
-- Maintenance process: `MAINTENANCE.md`
-- Technical audit and roadmap: `PROJECT_AUDIT.md`
+- Change history: `docs/CHANGELOG.md`
+- Maintenance process: `docs/MAINTENANCE.md`
+- Technical audit and roadmap: `docs/PROJECT_AUDIT.md`
 
 ## License
 

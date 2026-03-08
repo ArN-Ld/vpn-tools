@@ -8,6 +8,8 @@ All notable changes to this project are documented in this file.
 - Added `MAINTENANCE.md` and `PROJECT_AUDIT.md` to formalize maintenance and technical review.
 - Added GitHub Actions CI workflow in `.github/workflows/ci.yml`.
 - Added regression tests for non-interactive execution and geocode fallback.
+- Organized project structure with `src/vpn_tools/`, `docs/`, `tests/unit/` directories.
+- Created `runtime/` directory for all logs, database, and cache files.
 
 ### Changed
 - Fixed non-interactive behavior so command execution still runs without UI animation.
@@ -16,6 +18,9 @@ All notable changes to this project are documented in this file.
 - Updated `README.md` examples to use `mullvad_speed_test.py` consistently.
 - Reduced `requirements.txt` to runtime dependencies only.
 - Added automation flags: `--countdown-seconds` and `--no-open-results`.
+- Reorganized project from flat structure to modular package layout.
+- Moved all runtime artifacts (logs, DB, cache) to `runtime/` directory to keep root clean.
+- Updated paths in code and documentation to reflect new structure.
 
 ### Fixed
 - Fixed a regression where non-interactive mode could skip command execution (`spinner` and command wrapper were no-op).

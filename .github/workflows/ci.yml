@@ -25,7 +25,7 @@ jobs:
 
       - name: Syntax check
         run: |
-          python -m py_compile mullvad_speed_test.py mullvad_coordinates.py ui/display_manager.py
+          python -m py_compile mullvad_speed_test.py mullvad_coordinates.py src/vpn_tools/mullvad_speed_test.py src/vpn_tools/mullvad_coordinates.py src/vpn_tools/ui/display_manager.py
 
       - name: Run tests
         run: |

@@ -1,7 +1,7 @@
 import sys
 import time
 
-from ui.display_manager import DisplayManager
+from vpn_tools.ui.display_manager import DisplayManager
 
 
 def test_non_interactive_run_command_executes_process():

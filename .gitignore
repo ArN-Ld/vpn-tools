@@ -1,11 +1,5 @@
-# Logs
-*.log
-mullvad_test_results_*.log
-
-# Runtime artifacts
-*.db
-*.sqlite
-geocoords_cache.pkl
+# Runtime artifacts (logs, database, cache)
+runtime/
 
 # Python
 __pycache__/
