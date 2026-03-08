@@ -116,7 +116,7 @@ def test_get_location_coordinates_uses_local_city_lookup(monkeypatch):
         lambda _loc: ("Paris, France", (48.8566, 2.3522), ["Paris, France"]),
     )
 
-    def _unexpected_geopy(_ui):
+    def _unexpected_geopy():
         raise AssertionError("geopy should not be called when local city lookup matches")
 
     monkeypatch.setattr(mst, "load_geo_modules", _unexpected_geopy)

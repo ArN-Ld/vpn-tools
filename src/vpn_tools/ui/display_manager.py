@@ -69,8 +69,17 @@ STATUS_STYLES = {
 }
 
 
+_cached_terminal_width = 0
+_cached_terminal_width_time = float('-inf')
+
+
 def get_terminal_width() -> int:
-    return shutil.get_terminal_size().columns if hasattr(shutil, 'get_terminal_size') else 80
+    global _cached_terminal_width, _cached_terminal_width_time
+    now = time.monotonic()
+    if now - _cached_terminal_width_time > 1.0:
+        _cached_terminal_width = shutil.get_terminal_size().columns if hasattr(shutil, 'get_terminal_size') else 80
+        _cached_terminal_width_time = now
+    return _cached_terminal_width
 
 
 def print_status(message: str, status: Optional[str] = None) -> None:

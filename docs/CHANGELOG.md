@@ -30,6 +30,15 @@ All notable changes to this project are documented in this file.
 - Updated CI actions to `actions/checkout@v6` and `actions/setup-python@v6`.
 - Enabled GitHub Issues and auto-merge support in repository settings.
 
+### Improved
+- Reduced CPU load during connection polling by decoupling visual updates (10Hz) from subprocess status checks (2Hz), cutting subprocess spawns by 5×.
+- Removed unnecessary spinner thread from server data parsing (instant operation no longer wrapped in threading overhead).
+- Replaced O(n²) linear scans in summary tables with O(1) hostname-to-server dict lookups.
+- Cached terminal width in `display_manager.py` to eliminate repeated syscalls in tight animation loops.
+- Fixed `load_geo_modules` `lru_cache` to no longer key on UI instance (proper cache behavior).
+- Wrapped results file handle in try/finally to prevent resource leak on exception.
+- Changed bare `except:` to `except Exception:` in connection polling to allow Ctrl+C interruption.
+
 ### Fixed
 - Fixed a regression where non-interactive mode could skip command execution (`spinner` and command wrapper were no-op).
 - Fixed automation flow to avoid blocking prompts after CLI parsing.

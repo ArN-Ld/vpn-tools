@@ -137,7 +137,7 @@ def run_command(cmd, timeout=None, check=False, capture_output=False):
         return None
 
 @functools.lru_cache(maxsize=1)
-def load_geo_modules(ui):
+def load_geo_modules():
     """Lazily load geopy modules only when needed"""
     try:
         from geopy.distance import geodesic
@@ -146,7 +146,8 @@ def load_geo_modules(ui):
         return geodesic, Nominatim, GeocoderTimedOut
     except ImportError:
         logger.error("geopy modules not found. Please install with: pip install geopy")
-        ui.error("Required geopy modules not found. Please install with: pip install geopy")
+        print("\nERROR: Required geopy modules not found.", file=sys.stderr)
+        print("Please install with: pip install geopy\n", file=sys.stderr)
         sys.exit(1)
 
 def input_location(ui):
@@ -234,6 +235,7 @@ class MullvadTester:
         # Get Mullvad servers
         self.ui.header("RETRIEVING MULLVAD SERVERS")
         self.servers = self._get_servers()
+        self._server_by_hostname = {s.hostname: s for s in self.servers}
         
         # Initialize results and counters
         self.results = {}
@@ -363,7 +365,7 @@ class MullvadTester:
                 return coords
 
         # Load geopy modules
-        _, Nominatim, _ = load_geo_modules(self.ui)
+        _, Nominatim, _ = load_geo_modules()
 
         geolocator = Nominatim(user_agent="mullvad_speed_test")
         self.ui.info(f"Searching for coordinates for {location}...")
@@ -424,7 +426,7 @@ class MullvadTester:
     def _calculate_distance(self, server_coords):
         """Calculate distance between server and reference location"""
         if server_coords == (0.0, 0.0) or self.reference_coords == (0.0, 0.0): return float('inf')
-        geodesic, _, _ = load_geo_modules(self.ui)
+        geodesic, _, _ = load_geo_modules()
         return geodesic(self.reference_coords, server_coords).kilometers
 
     def _get_servers(self):
@@ -474,7 +476,7 @@ class MullvadTester:
                             longitude=current_coords[1], distance_km=distance
                         ))
 
-            self.ui.spinner("Processing server data", lambda stop_event: process_lines())
+            process_lines()
 
             # Sort servers by distance - more efficient than sorting during processing
             return sorted(servers, key=lambda x: x.distance_km)
@@ -828,8 +830,10 @@ class MullvadTester:
             
             self.ui.info(f"Waiting for connection confirmation (total timeout: {total_timeout:.1f}s)...")
 
-            poll_interval = 0.1  # Check every 0.1 seconds for smoother progress bar
+            poll_interval = 0.1  # Visual update every 100ms for smooth progress bar
+            status_check_interval = 0.5  # Check mullvad status every 500ms to reduce subprocess overhead
             max_steps = int(remaining_time / poll_interval)
+            last_status_check = 0.0
 
             for i in range(max_steps):
                 current_time = time.time()
@@ -838,16 +842,19 @@ class MullvadTester:
                 if total_elapsed >= total_timeout:
                     break
 
-                try:
-                    output = subprocess.check_output(["mullvad", "status"], text=True, timeout=2)
-                    if "Connected" in output:
-                        server.connection_time = total_elapsed
-                        logger.info(f"Successfully connected to server in {total_elapsed:.2f} seconds")
-                        print(f"\r{' ' * get_terminal_width()}", end='\r')
-                        self.ui.connection_status(server.hostname, "success", total_elapsed)
-                        return True
-                except:
-                    pass
+                # Only spawn subprocess at the defined interval to reduce CPU load
+                if current_time - last_status_check >= status_check_interval:
+                    last_status_check = current_time
+                    try:
+                        output = subprocess.check_output(["mullvad", "status"], text=True, timeout=2)
+                        if "Connected" in output:
+                            server.connection_time = total_elapsed
+                            logger.info(f"Successfully connected to server in {total_elapsed:.2f} seconds")
+                            print(f"\r{' ' * get_terminal_width()}", end='\r')
+                            self.ui.connection_status(server.hostname, "success", total_elapsed)
+                            return True
+                    except Exception:
+                        pass
 
                 self.ui.progress_bar(
                     total_elapsed, total_timeout,
@@ -1157,19 +1164,20 @@ class MullvadTester:
 
         session_id, results_file, file_handle, initial_servers, remaining_servers = session
         tested_servers = []
-        viable_servers = self._test_server_list(initial_servers, file_handle, session_id, tested_servers, len(initial_servers), 0)
+        try:
+            viable_servers = self._test_server_list(initial_servers, file_handle, session_id, tested_servers, len(initial_servers), 0)
 
-        while viable_servers < self.min_viable_servers and len(tested_servers) < self.max_servers_hard_limit:
-            additional_servers, remaining_servers = self._extend_selection_if_needed(
-                viable_servers, tested_servers, remaining_servers, file_handle, len(initial_servers)
-            )
-            if not additional_servers:
-                break
-            viable_servers = self._test_server_list(
-                additional_servers, file_handle, session_id, tested_servers, len(initial_servers), viable_servers
-            )
-
-        file_handle.close()
+            while viable_servers < self.min_viable_servers and len(tested_servers) < self.max_servers_hard_limit:
+                additional_servers, remaining_servers = self._extend_selection_if_needed(
+                    viable_servers, tested_servers, remaining_servers, file_handle, len(initial_servers)
+                )
+                if not additional_servers:
+                    break
+                viable_servers = self._test_server_list(
+                    additional_servers, file_handle, session_id, tested_servers, len(initial_servers), viable_servers
+                )
+        finally:
+            file_handle.close()
         self._write_summary(results_file, viable_servers, len(tested_servers))
 
     def _write_server_results_to_file(self, file, server, speedtest_result, mtr_result, viable):
@@ -1207,7 +1215,7 @@ class MullvadTester:
         # Calculate column widths
         col_widths = [
             max(len(header_list[0]), max([len(s[0]) for s in servers_list])),
-            max(len(header_list[1]), max([len(next(sv for sv in self.servers if sv.hostname == s[0]).country) for s in servers_list])),
+            max(len(header_list[1]), max([len(self._server_by_hostname[s[0]].country) for s in servers_list])),
             max(len(header_list[2]), 10),  # Distance column
             max(len(header_list[3]), 10)   # Value column
         ]
@@ -1219,7 +1227,7 @@ class MullvadTester:
         # Generate table rows
         rows = []
         for hostname, value in servers_list:
-            server = next(s for s in self.servers if s.hostname == hostname)
+            server = self._server_by_hostname[hostname]
             formatted_value = field_fn(value) if field_fn else str(value)
             rows.append("| " + hostname.ljust(col_widths[0]) + " | " + \
                   server.country.ljust(col_widths[1]) + " | " + \
@@ -1280,8 +1288,8 @@ class MullvadTester:
                     key=lambda x: x[1]
                 ),
                 'connection_time': sorted(
-                    [(hostname, next(s.connection_time for s in self.servers if s.hostname == hostname)) 
-                    for hostname in viable_hostname_set if next(s.connection_time for s in self.servers if s.hostname == hostname) > 0],
+                    [(hostname, self._server_by_hostname[hostname].connection_time) 
+                    for hostname in viable_hostname_set if self._server_by_hostname[hostname].connection_time > 0],
                     key=lambda x: x[1]
                 )
             }
@@ -1322,8 +1330,9 @@ class MullvadTester:
                         avg_upload = statistics.mean(r[1].upload_speed for r in valid_results)
                         avg_latency = statistics.mean(r[2].avg_latency for r in valid_results)
 
-                        successful_connections = [s.connection_time for s in self.servers 
-                                               if s.hostname in viable_hostname_set and s.connection_time > 0]
+                        successful_connections = [self._server_by_hostname[hostname].connection_time 
+                                               for hostname in viable_hostname_set 
+                                               if self._server_by_hostname[hostname].connection_time > 0]
                         avg_connection_time = statistics.mean(successful_connections) if successful_connections else 0
 
                         # Write statistics 
@@ -1353,7 +1362,7 @@ class MullvadTester:
                         
                         self.ui.header("BEST SERVERS DETAILS")
                         for hostname, score in best_servers[:3]:
-                            server = next(s for s in self.servers if s.hostname == hostname)
+                            server = self._server_by_hostname[hostname]
                             speed_result, mtr_result, _ = self.results[hostname]
                             print(
                                 f"{colorize(hostname, Fore.CYAN)} ({server.city}, {server.country}): "
