@@ -99,6 +99,10 @@
         29.7604,
         -95.3698
     ],
+    "Kansas City, MO, USA": [
+        39.0997,
+        -94.5786
+    ],
     "Detroit, MI, USA": [
         42.3314,
         -83.0458
@@ -170,6 +174,10 @@
     "Gothenburg, Sweden": [
         57.7089,
         11.9746
+    ],
+    "Malmö, Sweden": [
+        55.605,
+        13.0038
     ],
     "Oslo, Norway": [
         59.9139,
@@ -326,6 +334,14 @@
     "Tel Aviv, Israel": [
         32.0853,
         34.7818
+    ],
+    "Buenos Aires, Argentina": [
+        -34.6037,
+        -58.3816
+    ],
+    "Fortaleza, Brazil": [
+        -3.7319,
+        -38.5267
     ],
     "Sao Paulo, Brazil": [
         -23.5505,
