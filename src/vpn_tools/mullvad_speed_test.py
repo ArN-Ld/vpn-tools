@@ -40,8 +40,11 @@ MAX_SPEEDTEST_TIME, MIN_SPEEDTEST_TIME, MIN_VIABLE_SERVERS = 70.0, 15.0, 8
 CONTINENT_MAPPING = {
     'North America': ['us', 'ca', 'mx'],
     'South America': ['br', 'ar', 'cl', 'co', 'pe'],
-    'Europe': ['gb', 'uk', 'de', 'fr', 'it', 'es', 'nl', 'se', 'no', 'dk', 'fi', 'ch', 'at', 'be', 'ie', 'pt', 'pl', 'cz', 'gr', 'ro', 'hu'],
-    'Asia': ['jp', 'kr', 'sg', 'hk', 'in', 'my', 'th', 'vn', 'id', 'ph', 'tw', 'cn'],
+    'Europe': ['gb', 'uk', 'de', 'fr', 'it', 'es', 'nl', 'se', 'no', 'dk', 'fi', 'ch', 'at', 'be',
+               'ie', 'pt', 'pl', 'cz', 'gr', 'ro', 'hu', 'si', 'sk', 'al', 'hr', 'rs', 'ee', 'bg',
+               'cy', 'tr', 'ua', 'lv', 'lt', 'lu', 'is', 'md', 'ba', 'me', 'mk', 'mt'],
+    'Asia': ['jp', 'kr', 'sg', 'hk', 'in', 'my', 'th', 'vn', 'id', 'ph', 'tw', 'cn', 'il', 'ae',
+             'qa', 'sa', 'pk', 'bd', 'lk', 'kh', 'mm', 'la', 'np', 'uz', 'kz', 'ge', 'am', 'az'],
     'Oceania': ['au', 'nz'],
     'Africa': ['za', 'eg', 'ng', 'ke', 'ma']
 }
@@ -589,8 +592,11 @@ class MullvadTester:
         
         for server in test_servers:
             self.ui.info(f"Testing {server.hostname}...")
+            cal_country_code = server.hostname.split('-')[0]
+            cal_continent = COUNTRY_TO_CONTINENT.get(cal_country_code, 'Unknown')
             self._emit_json_status("calibration_test", f"Calibrating: {server.hostname}",
-                                  hostname=server.hostname, city=server.city, country=server.country)
+                                  hostname=server.hostname, city=server.city, country=server.country,
+                                  continent=cal_continent)
             
             if self.connect_to_server(server):
                 conn_times.append(server.connection_time)
