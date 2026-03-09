@@ -3,6 +3,10 @@
 All notable changes to this project are documented in this file.
 
 ## [Unreleased]
+
+---
+
+## [1.1.0] - 2026-03-09
 ### Added
 - Added `requirements-dev.txt` to separate development dependencies from runtime dependencies.
 - Added `MAINTENANCE.md` and `PROJECT_AUDIT.md` to formalize maintenance and technical review.
