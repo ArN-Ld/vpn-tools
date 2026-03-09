@@ -100,3 +100,35 @@ Goal: stay aware of upstream fixes without forcing destructive merges into a div
 ### Helper Script
 - Use `scripts/upstream_review.sh` for a quick non-destructive review summary.
 - Example: `bash scripts/upstream_review.sh upstream main`
+
+---
+
+## Known Compatibility Issues
+
+### mtr ≤ 0.96 — macOS 26 Tahoe (as of 2026-03-09)
+
+**Status**: Active, unresolved upstream.
+
+**Symptom**: `mtr` (and `mtr-packet`) fails to open raw sockets even when invoked as root:
+```
+mtr-packet: Failure to open IPv4 sockets
+mtr-packet: Failure to open IPv6 sockets
+mtr: Failure to start mtr-packet: Invalid argument
+```
+
+**Affected configuration**:
+- macOS 26.x (Tahoe) — `sw_vers ProductVersion: 26.x`
+- mtr 0.96 via Homebrew (`brew info mtr` → `0.96`)
+- Apple Silicon (M-series) confirmed; Intel status unknown
+
+**Root cause**: Apple changed raw socket privilege handling in the Tahoe kernel. `mtr-packet` can no longer open `AF_INET`/`AF_INET6` raw sockets regardless of effective UID.
+
+**Workaround (current)**: `_run_ping_fallback()` is triggered automatically after both `mtr` and `sudo -n mtr` fail. Uses `ping -c N -q` to measure average latency and packet loss. Hop count is reported as 0 to signal fallback mode to callers.
+
+**Resolution path**:
+1. Monitor [mtr releases](https://github.com/traviscross/mtr) — a fix likely requires adopting the `Network Extension` entitlement or switching to `libpcap`.
+2. Monitor [Homebrew mtr formula](https://formulae.brew.sh/formula/mtr) for a patched bottle.
+3. When a fixed version ships: `brew upgrade mtr`, then verify with:
+   ```bash
+   mtr -n -c 3 -r 1.1.1.1; echo "exit: $?"   # should exit 0
+   ```

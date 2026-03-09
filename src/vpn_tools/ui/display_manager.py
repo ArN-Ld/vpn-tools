@@ -314,6 +314,7 @@ class DisplayManager:
         try:
             completed = subprocess.run(
                 cmd,
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -359,7 +360,7 @@ class DisplayManager:
 
         def action(stop_event):
             process = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
             )
             while process.poll() is None and not stop_event.is_set():
                 time.sleep(0.1)

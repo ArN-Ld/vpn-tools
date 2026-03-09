@@ -46,8 +46,8 @@ Note: Mullvad removed OpenVPN from its relay fleet in January 2026. This tool no
 - **Python**: 3.9+ (tested with Python 3.9.6)
 - **Mullvad VPN**: Client with CLI access ([download](https://mullvad.net/download))
 - **System packages**:
-  - `mtr` (My TraceRoute) - for network path analysis
-  - `sudo` privileges - required for MTR execution
+  - `mtr` (My TraceRoute) — for network path analysis. `sudo` is **not** required: the tool tries `mtr` directly first, then `sudo -n mtr` (non-interactive), then falls back to `ping` automatically.
+  - > ⚠ **macOS 26 Tahoe**: mtr 0.96 (current Homebrew bottle) cannot open raw sockets on Tahoe even as root. The tool detects this and falls back to `ping` automatically — latency and packet loss are still measured, only hop data is unavailable. This is an upstream mtr bug; monitor [Homebrew mtr](https://formulae.brew.sh/formula/mtr) for a fix.
 
 ### Python Dependencies
 
@@ -88,14 +88,14 @@ Note: Mullvad removed OpenVPN from its relay fleet in January 2026. This tool no
 
 Basic usage:
 ```bash
-sudo python mullvad_speed_test.py
+python src/vpn_tools/mullvad_speed_test.py
 ```
 
 This will run in interactive mode, guiding you through the process.
 
 Advanced usage with options:
 ```bash
-sudo python mullvad_speed_test.py --location "Paris, France" --max-servers 20
+python src/vpn_tools/mullvad_speed_test.py --location "Paris, France" --max-servers 20
 ```
 
 ## Command-line Arguments
@@ -232,8 +232,8 @@ If your location cannot be determined automatically:
 - Specify coordinates directly: `--default-lat 48.8566 --default-lon 2.3522`
 
 ### Connection Problems
-- Permission Denied for MTR: Run the script with sudo privileges
 - Mullvad CLI Not Found: Ensure Mullvad is installed and its CLI is in your system PATH
+- MTR not working: The tool falls back to `ping` automatically. If you want full MTR hop data, check `mtr -n -c 3 -r 1.1.1.1` manually. On macOS 26 Tahoe, mtr 0.96 is broken at the OS level — this is expected until Homebrew ships a fix.
 - If the script fails to connect to many servers:
   - Check your internet connection
   - Verify Mullvad VPN is properly configured

@@ -59,5 +59,6 @@ Deep analysis of architecture, automation reliability, and maintainability for:
 
 ## Risk Areas To Monitor
 - External command fragility (`mullvad`, `mtr`, `speedtest-cli`) and parsing assumptions.
+  - **mtr 0.96 / macOS Tahoe**: mtr cannot open raw sockets on macOS 26.x even as root. Auto-fallback to `ping` is active. Revisit when Homebrew ships mtr > 0.96.
 - Unicode rendering inconsistencies in mixed terminals.
 - Long-running commands and timeout behavior under slow systems.

@@ -3,6 +3,10 @@
 All notable changes to this project are documented in this file.
 
 ## [Unreleased]
+
+---
+
+## [1.1.0] - 2026-03-09
 ### Added
 - Added `requirements-dev.txt` to separate development dependencies from runtime dependencies.
 - Added `MAINTENANCE.md` and `PROJECT_AUDIT.md` to formalize maintenance and technical review.
@@ -16,6 +20,9 @@ All notable changes to this project are documented in this file.
 - Added repository governance templates: `.github/CODEOWNERS`, issue templates, and PR template.
 - Added case-insensitive city-only location resolution using Mullvad coordinates database.
 - Added missing Mullvad city coordinates from the official server list (Buenos Aires, Fortaleza, Kansas City, Malmö).
+- Added machine-readable JSON status protocol (`--machine-readable` flag) for structured IPC with GUI frontends.
+- Added `_run_ping_fallback()` method as automatic fallback when `mtr` is unavailable or broken (e.g. macOS 26 Tahoe). Parses `ping -c N -q` summary for average latency and packet loss.
+- Added `mtr_ping_fallback` and `mtr_failed` JSON status events emitted when the MTR step degrades.
 
 ### Changed
 - Removed OpenVPN mode and simplified speed tests to WireGuard-only flow (Mullvad removed OpenVPN relays in January 2026).
@@ -31,6 +38,10 @@ All notable changes to this project are documented in this file.
 - Updated paths in code and documentation to reflect new structure.
 - Updated CI actions to `actions/checkout@v6` and `actions/setup-python@v6`.
 - Enabled GitHub Issues and auto-merge support in repository settings.
+- Expanded `CONTINENT_MAPPING` with all Mullvad country codes previously missing: `si`, `sk`, `al`, `hr`, `rs`, `ee`, `bg`, `cy`, `il`, `tr`, `ua`, `lv`, `lt`, `lu`, `is`, `md`, `ba`, `me`, `mk`, `ae`, `qa`, `sa` and others — eliminates "Unknown" continent display for any current Mullvad relay.
+- `_run_mtr()` no longer invokes `sudo` directly. Strategy: (1) `mtr` without sudo, (2) `sudo -n mtr` (non-interactive, no prompt), (3) `_run_ping_fallback()`. No password prompt can appear in any code path.
+- `calibration_test` JSON status events now include a `continent` field.
+- `mtr_running` JSON status is emitted only when `download_speed > 0` (skips non-viable servers).
 
 ### Improved
 - Reduced CPU load during connection polling by decoupling visual updates (10Hz) from subprocess status checks (2Hz), cutting subprocess spawns by 5×.
@@ -40,6 +51,7 @@ All notable changes to this project are documented in this file.
 - Fixed `load_geo_modules` `lru_cache` to no longer key on UI instance (proper cache behavior).
 - Wrapped results file handle in try/finally to prevent resource leak on exception.
 - Changed bare `except:` to `except Exception:` in connection polling to allow Ctrl+C interruption.
+- Added `stdin=subprocess.DEVNULL` to all `subprocess.Popen` and `subprocess.run` calls in `display_manager.py`, preventing any subprocess (including `sudo`) from reading the terminal or blocking on a password prompt.
 
 ### Fixed
 - Fixed a regression where non-interactive mode could skip command execution (`spinner` and command wrapper were no-op).
@@ -47,6 +59,10 @@ All notable changes to this project are documented in this file.
 - Added explicit least-privilege workflow permissions in `.github/workflows/ci.yml` (`contents: read`).
 - Removed plaintext logging of precise reference location and coordinates in `src/vpn_tools/mullvad_speed_test.py`.
 - Enabled required signed commits on protected `main` branch.
+- Fixed `sudo mtr` prompting for password when launched from a non-TTY context (GUI app, subprocess pipe). Root cause: missing `stdin=DEVNULL` on all subprocess calls.
+
+### Known Compatibility Issues
+- **macOS 26 Tahoe + mtr ≤ 0.96 (Homebrew)**: `mtr-packet` cannot open raw IPv4/IPv6 sockets even as root (`Failure to open IPv4 sockets`). This is a regression in macOS Tahoe's network stack. The `_run_ping_fallback()` path is triggered automatically. Monitor [mtr releases](https://github.com/traviscross/mtr/releases) and [Homebrew mtr formula](https://formulae.brew.sh/formula/mtr) for a fix.
 
 ## [2025-09-14]
 ### Added
