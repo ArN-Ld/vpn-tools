@@ -157,10 +157,13 @@ def format_server_info(server: ServerInfo) -> str:
 
 
 def format_mtr_results(result) -> str:
+    mode = "Ping" if result.hops == 0 else "MTR"
     msg = (
-        f"{get_symbol('ping')} Latency: {result.avg_latency:.2f} ms | "
-        f"Loss: {result.packet_loss:.2f}% | Hops: {result.hops}"
+        f"{get_symbol('ping')} {mode} — Latency: {result.avg_latency:.2f} ms | "
+        f"Loss: {result.packet_loss:.2f}%"
     )
+    if result.hops > 0:
+        msg += f" | Hops: {result.hops}"
     return colorize(msg, Fore.YELLOW)
 
 

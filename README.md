@@ -47,7 +47,12 @@ Note: Mullvad removed OpenVPN from its relay fleet in January 2026. This tool no
 - **Mullvad VPN**: Client with CLI access ([download](https://mullvad.net/download))
 - **System packages**:
   - `mtr` (My TraceRoute) — for network path analysis. `sudo` is **not** required: the tool tries `mtr` directly first, then `sudo -n mtr` (non-interactive), then falls back to `ping` automatically.
-  - > ⚠ **macOS 26 Tahoe**: mtr 0.96 (current Homebrew bottle) cannot open raw sockets on Tahoe even as root. The tool detects this and falls back to `ping` automatically — latency and packet loss are still measured, only hop data is unavailable. This is an upstream mtr bug; monitor [Homebrew mtr](https://formulae.brew.sh/formula/mtr) for a fix.
+  - > ⚠ **macOS Homebrew mtr 0.96**: `mtr-packet` is installed by Homebrew with the SUID bit but **owned by the current user** (not root). This causes `euid` to be set to the user instead of root, breaking raw socket creation. Fix:
+  - > ```bash
+  - > sudo chown root:wheel $(brew --prefix)/Cellar/mtr/0.96/sbin/mtr-packet
+  - > sudo chmod 4755 $(brew --prefix)/Cellar/mtr/0.96/sbin/mtr-packet
+  - > ```
+  - > After this fix, `mtr` works without `sudo`. If unfixed, the tool detects the failure and falls back to `ping` automatically — latency and packet loss are still measured, only hop data is unavailable.
 
 ### Python Dependencies
 
@@ -233,7 +238,7 @@ If your location cannot be determined automatically:
 
 ### Connection Problems
 - Mullvad CLI Not Found: Ensure Mullvad is installed and its CLI is in your system PATH
-- MTR not working: The tool falls back to `ping` automatically. If you want full MTR hop data, check `mtr -n -c 3 -r 1.1.1.1` manually. On macOS 26 Tahoe, mtr 0.96 is broken at the OS level — this is expected until Homebrew ships a fix.
+- MTR not working: The tool falls back to `ping` automatically. If you want full MTR hop data, run `mtr -n -c 3 -r 1.1.1.1` manually. On macOS with Homebrew mtr, fix ownership: `sudo chown root:wheel $(brew --prefix)/Cellar/mtr/0.96/sbin/mtr-packet && sudo chmod 4755 $(brew --prefix)/Cellar/mtr/0.96/sbin/mtr-packet`.
 - If the script fails to connect to many servers:
   - Check your internet connection
   - Verify Mullvad VPN is properly configured
@@ -255,7 +260,7 @@ The tools generate detailed logs and data files in the `runtime/` directory:
 
 ## Security Notes
 
-- **Privilege requirements**: The tool requires sudo privileges for MTR tests
+- **Privilege requirements**: With the Homebrew mtr fix applied (see System Requirements), no `sudo` is needed. Without the fix, the tool falls back to `ping` automatically.
 - **Data privacy**: No sensitive data (like API keys or credentials) is stored
 - **Local storage**: All logs and results are stored locally in the `runtime/` directory
 - **Vulnerability reporting**: See [SECURITY.md](SECURITY.md) for security policy and how to report issues

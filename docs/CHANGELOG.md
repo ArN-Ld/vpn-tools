@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- `format_mtr_results()` in `display_manager.py` now shows "Ping" or "MTR" dynamically based on hop count (`hops == 0` → ping fallback path), and omits the hops field when zero.
+
+### Fixed
+- Corrected `README.md` mtr diagnosis: replaced inaccurate "macOS Tahoe kernel regression" language with the actual root cause (Homebrew `mtr-packet` SUID bit owned by installing user, not root) and the exact fix commands.
+
 ---
 
 ## [1.1.0] - 2026-03-09
@@ -62,7 +68,7 @@ All notable changes to this project are documented in this file.
 - Fixed `sudo mtr` prompting for password when launched from a non-TTY context (GUI app, subprocess pipe). Root cause: missing `stdin=DEVNULL` on all subprocess calls.
 
 ### Known Compatibility Issues
-- **macOS 26 Tahoe + mtr ≤ 0.96 (Homebrew)**: `mtr-packet` cannot open raw IPv4/IPv6 sockets even as root (`Failure to open IPv4 sockets`). This is a regression in macOS Tahoe's network stack. The `_run_ping_fallback()` path is triggered automatically. Monitor [mtr releases](https://github.com/traviscross/mtr/releases) and [Homebrew mtr formula](https://formulae.brew.sh/formula/mtr) for a fix.
+- **macOS Homebrew mtr 0.96**: `brew install mtr` sets the SUID bit on `mtr-packet` but leaves it owned by the installing user (not root). When `mtr` spawns `mtr-packet`, the SUID bit forces `euid` to the file owner (non-root), causing `socket(SOCK_RAW)` to fail with `EPERM`. This is not a macOS kernel restriction — raw sockets work fine under root. Fix: `sudo chown root:wheel $(brew --prefix)/Cellar/mtr/0.96/sbin/mtr-packet && sudo chmod 4755 $(brew --prefix)/Cellar/mtr/0.96/sbin/mtr-packet`. The `_run_ping_fallback()` path is triggered automatically when unfixed.
 
 ## [2025-09-14]
 ### Added
