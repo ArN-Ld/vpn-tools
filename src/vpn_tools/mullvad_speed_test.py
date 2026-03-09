@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Mullvad VPN Server Performance Tester - Optimized Version"""
-import subprocess, json, re, time, os, pickle, sqlite3, statistics, logging, sys, random, functools
+import subprocess, json, re, time, os, pickle, sqlite3, statistics, logging, sys, random, functools, shutil
 from contextlib import contextmanager
 from typing import List, Dict, Tuple, Optional, Set
 from dataclasses import dataclass
@@ -28,7 +28,7 @@ except ImportError:
 
 # Constants
 DEFAULT_MAX_SERVERS, MAX_SERVERS_HARD_LIMIT = 15, 45
-RUNTIME_DIR = Path("runtime")
+RUNTIME_DIR = Path(os.environ.get("VPN_TOOLS_RUNTIME_DIR", "runtime"))
 DEFAULT_LOCATION = "Beijing, Beijing, China"
 COORDS_CACHE_FILE = RUNTIME_DIR / "geocoords_cache.pkl"
 DEFAULT_DB_FILE = RUNTIME_DIR / "mullvad_results.db"
@@ -51,26 +51,67 @@ COUNTRY_TO_CONTINENT = {code: continent for continent, codes in CONTINENT_MAPPIN
 # Keywords (country names, city names, country codes) mapped to continents
 KEYWORD_TO_CONTINENT = {
     **COUNTRY_TO_CONTINENT,
-    # Country and city names
-    'china': 'Asia',
-    'beijing': 'Asia',
-    'japan': 'Asia',
-    'singapore': 'Asia',
-    'france': 'Europe',
-    'germany': 'Europe',
-    'uk': 'Europe',
-    'london': 'Europe',
-    'kingdom': 'Europe',
-    'usa': 'North America',
-    'states': 'North America',
-    'canada': 'North America',
-    'mexico': 'North America',
-    'brazil': 'South America',
-    'argentina': 'South America',
-    'australia': 'Oceania',
-    'zealand': 'Oceania',
-    'africa': 'Africa',
-    'egypt': 'Africa',
+    # Country names
+    'china': 'Asia', 'japan': 'Asia', 'korea': 'Asia', 'india': 'Asia',
+    'singapore': 'Asia', 'malaysia': 'Asia', 'thailand': 'Asia',
+    'vietnam': 'Asia', 'indonesia': 'Asia', 'philippines': 'Asia', 'taiwan': 'Asia',
+    'israel': 'Asia',
+    'france': 'Europe', 'germany': 'Europe', 'italy': 'Europe', 'spain': 'Europe',
+    'netherlands': 'Europe', 'sweden': 'Europe', 'norway': 'Europe',
+    'denmark': 'Europe', 'finland': 'Europe', 'switzerland': 'Europe',
+    'austria': 'Europe', 'belgium': 'Europe', 'ireland': 'Europe',
+    'portugal': 'Europe', 'poland': 'Europe', 'czech': 'Europe',
+    'romania': 'Europe', 'hungary': 'Europe', 'greece': 'Europe',
+    'uk': 'Europe', 'kingdom': 'Europe', 'britain': 'Europe',
+    'bulgaria': 'Europe', 'albania': 'Europe', 'croatia': 'Europe',
+    'serbia': 'Europe', 'slovenia': 'Europe', 'slovakia': 'Europe',
+    'estonia': 'Europe', 'cyprus': 'Europe', 'turkey': 'Europe',
+    'ukraine': 'Europe',
+    'usa': 'North America', 'states': 'North America',
+    'canada': 'North America', 'mexico': 'North America',
+    'brazil': 'South America', 'argentina': 'South America',
+    'chile': 'South America', 'colombia': 'South America',
+    'peru': 'South America',
+    'australia': 'Oceania', 'zealand': 'Oceania',
+    'africa': 'Africa', 'egypt': 'Africa', 'nigeria': 'Africa',
+    'kenya': 'Africa', 'morocco': 'Africa',
+    # Major city names
+    'tokyo': 'Asia', 'osaka': 'Asia', 'seoul': 'Asia', 'beijing': 'Asia',
+    'shanghai': 'Asia', 'hong': 'Asia', 'mumbai': 'Asia', 'delhi': 'Asia',
+    'bangkok': 'Asia', 'taipei': 'Asia', 'manila': 'Asia', 'jakarta': 'Asia',
+    'lijiang': 'Asia', 'kuala': 'Asia', 'lumpur': 'Asia', 'aviv': 'Asia',
+    'paris': 'Europe', 'berlin': 'Europe', 'london': 'Europe', 'madrid': 'Europe',
+    'rome': 'Europe', 'amsterdam': 'Europe', 'stockholm': 'Europe',
+    'oslo': 'Europe', 'copenhagen': 'Europe', 'helsinki': 'Europe',
+    'zurich': 'Europe', 'vienna': 'Europe', 'brussels': 'Europe',
+    'lisbon': 'Europe', 'warsaw': 'Europe', 'prague': 'Europe',
+    'bucharest': 'Europe', 'budapest': 'Europe', 'athens': 'Europe',
+    'dublin': 'Europe', 'milan': 'Europe', 'barcelona': 'Europe',
+    'manchester': 'Europe', 'frankfurt': 'Europe', 'munich': 'Europe',
+    'glasgow': 'Europe', 'bordeaux': 'Europe', 'marseille': 'Europe',
+    'dusseldorf': 'Europe', 'gothenburg': 'Europe', 'stavanger': 'Europe',
+    'valencia': 'Europe', 'palermo': 'Europe', 'sofia': 'Europe',
+    'tirana': 'Europe', 'zagreb': 'Europe', 'belgrade': 'Europe',
+    'ljubljana': 'Europe', 'bratislava': 'Europe', 'tallinn': 'Europe',
+    'nicosia': 'Europe', 'istanbul': 'Europe', 'kyiv': 'Europe',
+    'york': 'North America', 'angeles': 'North America',
+    'chicago': 'North America', 'toronto': 'North America',
+    'montreal': 'North America', 'vancouver': 'North America',
+    'francisco': 'North America', 'seattle': 'North America',
+    'miami': 'North America', 'dallas': 'North America',
+    'atlanta': 'North America', 'denver': 'North America',
+    'washington': 'North America', 'boston': 'North America',
+    'phoenix': 'North America', 'houston': 'North America',
+    'detroit': 'North America', 'raleigh': 'North America',
+    'ashburn': 'North America', 'secaucus': 'North America',
+    'calgary': 'North America', 'queretaro': 'North America',
+    'paulo': 'South America', 'aires': 'South America',
+    'santiago': 'South America', 'bogota': 'South America',
+    'lima': 'South America', 'fortaleza': 'South America',
+    'sydney': 'Oceania', 'melbourne': 'Oceania', 'auckland': 'Oceania',
+    'perth': 'Oceania', 'brisbane': 'Oceania', 'adelaide': 'Oceania',
+    'cairo': 'Africa', 'johannesburg': 'Africa', 'lagos': 'Africa',
+    'nairobi': 'Africa', 'casablanca': 'Africa', 'cape': 'Africa',
 }
 
 # Setup logging (will be configured properly in main after runtime dir is created)
@@ -207,10 +248,12 @@ class MullvadTester:
                  min_download_speed=MIN_DOWNLOAD_SPEED,
                  connection_timeout=DEFAULT_CONNECTION_TIME,
                  min_viable_servers=MIN_VIABLE_SERVERS,
-                 open_results_prompt=True):
+                 open_results_prompt=True,
+                 machine_readable=False):
         
         # Set up logging and instance variables
         logger.setLevel(logging.INFO if verbose else logging.WARNING)
+        self.machine_readable = machine_readable
         self.target_host = target_host
         self.max_servers_hard_limit = max_servers_hard_limit
         self.min_download_speed = min_download_speed
@@ -491,12 +534,23 @@ class MullvadTester:
 
     def _get_location_continent(self, location):
         """Determine which continent a location is in"""
-        location_lower = location.lower().replace(',', ' ').replace('.', ' ')
+        location_lower = location.lower().replace(',', ' ').replace('.', ' ').replace('-', ' ')
 
         for token in location_lower.split():
+            if not token:
+                continue
             continent = KEYWORD_TO_CONTINENT.get(token)
             if continent:
                 return continent
+
+        # Fallback: try matching the country part (last segment after comma)
+        parts = location.split(',')
+        if len(parts) >= 2:
+            country_part = parts[-1].strip().lower()
+            for token in country_part.split():
+                continent = KEYWORD_TO_CONTINENT.get(token)
+                if continent:
+                    return continent
 
         logger.warning(f"Could not determine continent for {location}, defaulting to Europe")
         return "Europe"
@@ -517,6 +571,9 @@ class MullvadTester:
         # Determine user's continent
         self.user_continent = self._get_location_continent(self.reference_location)
         self.ui.info(f"Your location appears to be in: {self.user_continent}")
+        self._emit_json_status("calibration", "Calibrating connections",
+                              continent=self.user_continent,
+                              continents=list(available_continents.keys()))
         
         # Select test servers - one from each continent
         test_servers = [random.choice(servers) for continent, servers in available_continents.items() if servers]
@@ -532,6 +589,8 @@ class MullvadTester:
         
         for server in test_servers:
             self.ui.info(f"Testing {server.hostname}...")
+            self._emit_json_status("calibration_test", f"Calibrating: {server.hostname}",
+                                  hostname=server.hostname, city=server.city, country=server.country)
             
             if self.connect_to_server(server):
                 conn_times.append(server.connection_time)
@@ -792,6 +851,8 @@ class MullvadTester:
             self.ui.header(f"SERVER TEST: {server.hostname}")
             self.ui.info(format_server_info(server))
             self.ui.connection_status(server.hostname, "connecting")
+            self._emit_json_status("connecting", f"Connecting: {server.hostname}",
+                                  hostname=server.hostname)
 
             connection_start_time = time.time()
             total_timeout = self.connection_timeout
@@ -888,6 +949,8 @@ class MullvadTester:
         self.ui.info(f"Allowing connection to stabilize before testing...")
 
         stabilization_time = 8  # seconds to allow for connection optimization
+        self._emit_json_status("stabilizing", f"Stabilizing: {server.hostname}",
+                              hostname=server.hostname)
 
         self.ui.spinner(
             f"{get_symbol('connecting')} Stabilizing connection",
@@ -897,6 +960,8 @@ class MullvadTester:
         self.ui.success("Connection stabilized and ready for testing")
 
         # Run speed test
+        self._emit_json_status("speedtest_running", f"Speed testing: {server.hostname}",
+                              hostname=server.hostname)
         speedtest_result = self._run_speedtest()
         
         if speedtest_result.download_speed < self.min_download_speed and speedtest_result.download_speed > 0:
@@ -908,7 +973,10 @@ class MullvadTester:
         if speedtest_result.download_speed == 0:
             self.ui.info(f"Speed test unsuccessful, MTR test skipped")
             mtr_result = MtrResult(0, 100, 0)
-        else: mtr_result = self._run_mtr()
+        else:
+            self._emit_json_status("mtr_running", f"MTR test: {server.hostname}",
+                                  hostname=server.hostname)
+            mtr_result = self._run_mtr()
         
         if speedtest_result.download_speed > 0 and mtr_result.avg_latency > 0:
             self.successful_servers += 1
@@ -1017,6 +1085,10 @@ class MullvadTester:
         )
         remaining_servers = [s for s in all_servers_filtered if s not in initial_servers]
 
+        self._emit_json_status("selection", f"Selected {len(initial_servers)} servers",
+                              count=len(initial_servers), total_available=len(all_servers_filtered),
+                              max_distance=max_distance, continent=getattr(self, 'user_continent', 'Unknown'))
+
         self.ui.header("STARTING TESTS")
         message = (
             f"Starting tests on {len(initial_servers)} servers" +
@@ -1039,6 +1111,14 @@ class MullvadTester:
             self.ui.info(f"Location: {server.city}, {server.country}")
             self.ui.info(f"Distance: {server.distance_km:.0f} km")
 
+            country_code = server.hostname.split('-')[0]
+            continent = COUNTRY_TO_CONTINENT.get(country_code, 'Unknown')
+            self._emit_json_status("testing", f"Testing {server.hostname}",
+                                  hostname=server.hostname, city=server.city,
+                                  country=server.country, continent=continent,
+                                  distance_km=round(server.distance_km, 1),
+                                  index=idx, total=initial_total)
+
             speedtest_result, mtr_result, viable = self.test_server(server)
             self.results[server.hostname] = (speedtest_result, mtr_result, viable)
 
@@ -1048,6 +1128,14 @@ class MullvadTester:
             if session_id:
                 self._save_results_to_db(session_id, server, speedtest_result, mtr_result, viable)
             self._write_server_results_to_file(file_handle, server, speedtest_result, mtr_result, viable)
+
+            if self.machine_readable:
+                self._emit_json_result(server, speedtest_result, mtr_result, viable)
+
+            self._emit_json_status("progress", f"{idx} tested, {viable_servers} viable",
+                                  tested=idx, viable=viable_servers,
+                                  successful=self.successful_servers,
+                                  target=self.min_viable_servers)
 
             self.ui.info(
                 f"Progress: {idx} servers tested ({self.successful_servers} successful, {viable_servers} viable)"
@@ -1088,6 +1176,9 @@ class MullvadTester:
             self.ui.info(
                 f"Searching for servers on continents other than {self.user_continent}"
             )
+            self._emit_json_status("extension", "Expanding search to other continents",
+                                  viable=viable_servers, target=self.min_viable_servers,
+                                  exclude_continent=self.user_continent)
             file_handle.write(
                 f"\nNote: Extending testing beyond initial {initial_total} servers to find at least {self.min_viable_servers} viable servers.\n"
             )
@@ -1205,6 +1296,35 @@ class MullvadTester:
         ]
         file.write("\n".join(results) + "\n")
         file.flush()  # Ensure data is written immediately
+
+    def _emit_json_result(self, server, speedtest_result, mtr_result, viable):
+        """Emit a JSON line to stdout for machine-readable consumption (GUI integration)"""
+        record = {
+            "type": "result",
+            "hostname": server.hostname,
+            "country": server.country,
+            "city": server.city,
+            "distance_km": round(server.distance_km, 1),
+            "connection_time": round(server.connection_time, 2),
+            "download_speed": round(speedtest_result.download_speed, 2),
+            "upload_speed": round(speedtest_result.upload_speed, 2),
+            "ping": round(speedtest_result.ping, 2),
+            "jitter": round(speedtest_result.jitter, 2),
+            "packet_loss": round(speedtest_result.packet_loss, 2),
+            "mtr_latency": round(mtr_result.avg_latency, 2),
+            "mtr_packet_loss": round(mtr_result.packet_loss, 2),
+            "mtr_hops": mtr_result.hops,
+            "viable": viable,
+        }
+        print(json.dumps(record, separators=(',', ':')), flush=True)
+
+    def _emit_json_status(self, phase, message, **extra):
+        """Emit a JSON status line for GUI consumption"""
+        if not self.machine_readable:
+            return
+        record = {"type": "status", "phase": phase, "message": message}
+        record.update(extra)
+        print(json.dumps(record, separators=(',', ':')), flush=True)
 
     def _print_summary_table(self, servers_list, title, file_handle=None, field_fn=None, header_list=None):
         """Generate a formatted summary table for terminal and log file"""
@@ -1457,13 +1577,13 @@ def input_custom_parameters(args, ui):
 def check_dependencies():
     """Check if required dependencies are installed"""
     missing_deps = []
-    for cmd, dep_name in [
-        (["speedtest-cli", "--version"], "speedtest-cli"),
-        (["mtr", "--version"], "mtr"),
-        (["mullvad", "--version"], "Mullvad VPN CLI")
+    for binary, dep_name in [
+        ("speedtest-cli", "speedtest-cli"),
+        ("mtr", "mtr"),
+        ("mullvad", "Mullvad VPN CLI")
     ]:
-        try: subprocess.run(cmd, check=True, capture_output=True)
-        except: missing_deps.append(dep_name)
+        if shutil.which(binary) is None:
+            missing_deps.append(dep_name)
     return missing_deps
 
 def check_optional_dependencies():
@@ -1512,6 +1632,8 @@ def main():
                       help='Interactive countdown before tests start (default: 5)')
     parser.add_argument('--no-open-results', action='store_false', dest='open_results',
                       help='Do not prompt to open results file at the end')
+    parser.add_argument('--machine-readable', action='store_true', default=False,
+                      help='Emit JSON lines to stdout for each server result (for GUI integration)')
 
     # Default to interactive mode if no args are provided
     parser.set_defaults(interactive=len(sys.argv) <= 1)
@@ -1563,7 +1685,8 @@ def main():
         verbose=args.verbose, db_file=args.db, interactive=args.interactive,
         max_servers_hard_limit=args.max_servers_hard_limit, min_download_speed=args.min_download_speed,
         connection_timeout=args.connection_timeout, min_viable_servers=args.min_viable_servers,
-        open_results_prompt=args.open_results
+        open_results_prompt=args.open_results,
+        machine_readable=args.machine_readable
     )
     tester.run_tests(max_servers=args.max_servers, max_distance=args.max_distance)
 
