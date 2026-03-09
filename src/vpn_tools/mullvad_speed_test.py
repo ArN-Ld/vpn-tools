@@ -35,6 +35,8 @@ DEFAULT_DB_FILE = RUNTIME_DIR / "mullvad_results.db"
 BEIJING_COORDS = (39.9057136, 116.3912972)
 MIN_DOWNLOAD_SPEED, DEFAULT_CONNECTION_TIME = 3.0, 20.0
 MAX_SPEEDTEST_TIME, MIN_SPEEDTEST_TIME, MIN_VIABLE_SERVERS = 70.0, 15.0, 8
+MAX_SPEEDTEST_TIME_DISTANT = 150.0  # for servers > 3000 km (high-latency VPN tunnels)
+DISTANCE_THRESHOLD_DISTANT = 3000   # km — beyond this, latency makes 70s too short
 
 # Continent mapping for server selection
 CONTINENT_MAPPING = {
@@ -737,19 +739,28 @@ class MullvadTester:
         
         return selected_servers
 
-    def _run_speedtest(self):
-        """Run speedtest-cli and return results"""
+    def _run_speedtest(self, distance_km=0):
+        """Run speedtest-cli and return results.
+        
+        distance_km is used to scale the timeout: servers beyond DISTANCE_THRESHOLD_DISTANT
+        get a longer timeout because high-latency VPN tunnels (300–600 ms ping) make
+        speedtest-cli's HTTP phases take significantly longer.
+        """
+        speedtest_timeout = (
+            MAX_SPEEDTEST_TIME_DISTANT if distance_km >= DISTANCE_THRESHOLD_DISTANT
+            else MAX_SPEEDTEST_TIME
+        )
         try:
             self.log_and_info("Running speed test...")
                 
             cmd = ["speedtest-cli", "--json", "--secure", "--timeout", "20"]
 
             stdout, stderr, returncode, timed_out, elapsed_time = self.ui.run_command_with_spinner(
-                cmd, f"{get_symbol('speedometer')} Speed test in progress", MAX_SPEEDTEST_TIME
+                cmd, f"{get_symbol('speedometer')} Speed test in progress", speedtest_timeout
             )
 
             if timed_out:
-                self.ui.info(f"Speed test canceled after {MAX_SPEEDTEST_TIME}s (maximum time reached)")
+                self.ui.info(f"Speed test canceled after {speedtest_timeout:.0f}s (maximum time reached)")
                 return SpeedTestResult(0, 0, 0, 0, 100)
 
             if elapsed_time < MIN_SPEEDTEST_TIME:
@@ -1026,7 +1037,7 @@ class MullvadTester:
         # Run speed test
         self._emit_json_status("speedtest_running", f"Speed testing: {server.hostname}",
                               hostname=server.hostname)
-        speedtest_result = self._run_speedtest()
+        speedtest_result = self._run_speedtest(distance_km=server.distance_km)
         
         if speedtest_result.download_speed < self.min_download_speed and speedtest_result.download_speed > 0:
             self.ui.info(f"Insufficient speed: {speedtest_result.download_speed:.2f} Mbps < {self.min_download_speed} Mbps")
