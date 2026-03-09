@@ -807,47 +807,105 @@ class MullvadTester:
             return SpeedTestResult(0, 0, 0, 0, 100)
 
     def _run_mtr(self):
-        """Run mtr and return results"""
+        """Run network latency test to target host.
+
+        Attempts (in order):
+          1. mtr without sudo  — works if mtr-packet has the SUID bit set
+          2. sudo -n mtr       — non-interactive (no password prompt); works if
+                                  sudo credentials are cached
+          3. ping fallback     — always works, provides avg latency + packet loss
+                                  (no hop data; hops reported as 0)
+        """
         try:
             self.log_and_info(f"Running MTR test to {self.target_host}...")
-                
+
             count, timeout = 10, 60
-            
-            cmd = ["sudo", "mtr", "-n", "-c", str(count), "-r", self.target_host]
+            mtr_args = ["-n", "-c", str(count), "-r", self.target_host]
+
+            stdout, stderr, returncode, timed_out = "", "", 1, False
+
+            # Attempt 1: mtr without sudo
+            cmd = ["mtr"] + mtr_args
             stdout, stderr, returncode, timed_out, _ = self.ui.run_command_with_spinner(
                 cmd, f"{get_symbol('ping')} MTR test in progress", timeout
             )
 
-            if timed_out or returncode != 0:
-                self.ui.info("MTR test failed")
-                if returncode != 0:
-                    logger.error(f"MTR failed: {stderr}")
+            # Attempt 2: sudo -n mtr (non-interactive — never prompts for password)
+            if not timed_out and returncode != 0:
+                cmd = ["sudo", "-n", "mtr"] + mtr_args
+                stdout, stderr, returncode, timed_out, _ = self.ui.run_command_with_spinner(
+                    cmd, f"{get_symbol('ping')} MTR test in progress (elevated)", timeout
+                )
+
+            # Attempt 3: ping fallback (mtr unavailable or broken on this OS)
+            if not timed_out and returncode != 0:
+                logger.warning(f"mtr unavailable (stderr: {stderr.strip()!r}), falling back to ping")
+                return self._run_ping_fallback(count, timeout)
+
+            if timed_out:
+                self.ui.info("MTR test timed out")
+                self._emit_json_status("mtr_failed", "MTR test timed out")
                 return MtrResult(0, 100, 0)
 
-            output = stdout
-
-            # Parse MTR output efficiently
-            lines = output.strip().split('\n')[1:]  # Skip header
+            # Parse MTR report output
+            lines = stdout.strip().split('\n')[1:]  # skip header line
             if not lines:
                 self.log_and_warning("No MTR results received")
                 return MtrResult(0, 100, 0)
 
-            # Extract data from last line (direct access instead of multiple splits)
             last_hop = lines[-1].split()
             avg_latency = float(last_hop[7])
             packet_loss = float(last_hop[2].rstrip('%'))
             hops = len(lines)
 
-            logger.info(f"MTR results - Latency: {avg_latency:.2f} ms, "
-                       f"Packet Loss: {packet_loss:.2f}%, Hops: {hops}")
-            
+            logger.info(f"MTR results — Latency: {avg_latency:.2f} ms, "
+                        f"Packet Loss: {packet_loss:.2f}%, Hops: {hops}")
             self.ui.success("MTR test results:")
             self.ui.info(format_mtr_results(result=MtrResult(avg_latency, packet_loss, hops)))
-                
             return MtrResult(avg_latency, packet_loss, hops)
+
         except Exception as e:
             logger.error(f"Unexpected error during MTR test: {e}")
             self.ui.info("MTR test unavailable (technical error)")
+            return MtrResult(0, 100, 0)
+
+    def _run_ping_fallback(self, count: int = 10, timeout: int = 30) -> "MtrResult":
+        """Fallback latency measurement using ping when mtr is unavailable."""
+        try:
+            self.ui.info("MTR unavailable — using ping for latency measurement")
+            self._emit_json_status("mtr_ping_fallback", "MTR unavailable, using ping")
+            cmd = ["ping", "-c", str(count), "-q", self.target_host]
+            stdout, stderr, returncode, timed_out, _ = self.ui.run_command_with_spinner(
+                cmd, f"{get_symbol('ping')} Ping test in progress", timeout
+            )
+            if timed_out or returncode != 0:
+                self.ui.info("Ping test failed")
+                self._emit_json_status("mtr_failed", "Ping test failed")
+                logger.error(f"Ping failed: {stderr}")
+                return MtrResult(0, 100, 0)
+
+            # Parse macOS/Linux ping -q summary:
+            # "5 packets transmitted, 5 received, 0.0% packet loss"
+            # "round-trip min/avg/max/stddev = 1.2/3.4/5.6/0.8 ms"
+            avg_latency, packet_loss = 0.0, 0.0
+            for line in stdout.splitlines():
+                if "packet loss" in line:
+                    import re
+                    m = re.search(r"([\d.]+)%\s+packet loss", line)
+                    if m:
+                        packet_loss = float(m.group(1))
+                if "min/avg/max" in line or "round-trip" in line:
+                    import re
+                    m = re.search(r"[\d.]+/([\d.]+)/[\d.]+", line)
+                    if m:
+                        avg_latency = float(m.group(1))
+
+            logger.info(f"Ping fallback — Latency: {avg_latency:.2f} ms, Loss: {packet_loss:.2f}%")
+            self.ui.success("Ping results:")
+            self.ui.info(format_mtr_results(result=MtrResult(avg_latency, packet_loss, 0)))
+            return MtrResult(avg_latency, packet_loss, 0)
+        except Exception as e:
+            logger.error(f"Ping fallback error: {e}")
             return MtrResult(0, 100, 0)
 
     def connect_to_server(self, server):
