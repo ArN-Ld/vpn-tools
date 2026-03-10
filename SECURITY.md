@@ -56,7 +56,7 @@ We take security seriously. If you discover a security vulnerability, please fol
 1. **Do NOT** open a public GitHub issue for security vulnerabilities
 2. Send a detailed report to the repository maintainer via:
    - GitHub Security Advisory (preferred): Use the "Security" tab → "Report a vulnerability"
-   - Direct contact to [@ArN-Ld](https://github.com/ArN-Ld) via GitHub private message
+   - Direct contact to [@ArN-LaB](https://github.com/ArN-LaB) via GitHub private message
 
 ### What to Include
 
@@ -93,7 +93,7 @@ Please provide:
 
 - [Python Security Best Practices](https://python.readthedocs.io/en/latest/library/security_warnings.html)
 - [Mullvad Privacy Policy](https://mullvad.net/en/help/privacy-policy/)
-- [GitHub Security Advisories](https://github.com/ArN-Ld/vpn-tools/security/advisories)
+- [GitHub Security Advisories](https://github.com/ArN-LaB/vpn-tools/security/advisories)
 
 ## Acknowledgments
 

@@ -1,15 +1,15 @@
 # Default owner for all files
-* @ArN-Ld
+* @ArN-LaB
 
 # CI and repository security-sensitive files
-.github/workflows/* @ArN-Ld
-.github/dependabot.yml @ArN-Ld
-SECURITY.md @ArN-Ld
+.github/workflows/* @ArN-LaB
+.github/dependabot.yml @ArN-LaB
+SECURITY.md @ArN-LaB
 
 # Core application code
-src/vpn_tools/* @ArN-Ld
-src/vpn_tools/ui/* @ArN-Ld
+src/vpn_tools/* @ArN-LaB
+src/vpn_tools/ui/* @ArN-LaB
 
 # Build and dependency configuration
-requirements.txt @ArN-Ld
-requirements-dev.txt @ArN-Ld
+requirements.txt @ArN-LaB
+requirements-dev.txt @ArN-LaB

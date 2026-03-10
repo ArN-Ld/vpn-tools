@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
   - name: Security vulnerability report
-    url: https://github.com/ArN-Ld/vpn-tools/security/advisories/new
+    url: https://github.com/ArN-LaB/vpn-tools/security/advisories/new
     about: Please report security issues privately via GitHub Security Advisories.

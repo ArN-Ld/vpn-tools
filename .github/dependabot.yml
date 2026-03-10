@@ -14,9 +14,9 @@ updates:
       prefix: "deps"
       include: "scope"
     reviewers:
-      - "ArN-Ld"
+      - "ArN-LaB"
     assignees:
-      - "ArN-Ld"
+      - "ArN-LaB"
 
   # Maintain dependencies for GitHub Actions
   - package-ecosystem: "github-actions"

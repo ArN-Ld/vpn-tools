@@ -47,7 +47,7 @@ Dependabot is configured in `.github/dependabot.yml` to automatically check for 
 When updates are available, Dependabot creates pull requests automatically with:
 - Labels: `dependencies`, `python` or `github-actions`
 - Commit prefix: `deps:` for Python, `ci:` for Actions
-- Assigned to: ArN-Ld for review
+- Assigned to: ArN-LaB for review
 
 ### Reviewing Dependabot PRs
 1. Check the changelog/release notes of the updated package
